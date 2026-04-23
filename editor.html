@@ -68,7 +68,7 @@
 <header>
     <h1 style="margin:0; display:flex; align-items:baseline; gap:10px;">
         CPC SPRITE STUDIO
-        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 21:05:00]</span>
+        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 23:25:00]</span>
     </h1>
     <div id="file-status">Archivo: <b>Ninguno</b> | Último acceso: <b>---</b></div>
 </header>
@@ -156,7 +156,8 @@
         <div id="help-content">
             <h3>1. Project Management & Basic Setup</h3>
             <ul>
-                <li><b>Save/Load Project <span class="hotkey-tag">JSON</span>:</b> Use the Floppy Disk and Folder icons on the top left. Saves the workspace configuration (frames, mode, dimensions) and all drawn pixels into a local JSON file. <span class="example">Example: Make a backup of your character sheet before making destructive palette changes.</span></li>
+            <li><b>Save/Load Project <span class="hotkey-tag">JSON</span>:</b> Use the Floppy Disk and Folder icons on the top left, or press <span class="hotkey-tag">Ctrl+S</span> to Quick Save. Saves the workspace configuration and all pixels. <span class="example">Example: Make a backup of your character sheet before making destructive palette changes.</span></li>
+            <li><b>Undo <span class="hotkey-tag">Ctrl+Z</span>:</b> Reverts your last drawing action or transformation.</li>
                 <li><b>Canvas Dimensions:</b> Change width (`DIM: x`) and height (`DIM: y`). The canvas dynamically recalculates the bytes needed depending on the selected CPC Mode.</li>
                 <li><b>Amstrad CPC Video Modes:</b> 
                     <ul>
@@ -175,6 +176,7 @@
                 <li><b>Circle <span class="hotkey-tag">C</span>:</b> Draws a perfect circle outline.</li>
                 <li><b>Paint Bucket <span class="hotkey-tag">G</span>:</b> Fills an enclosed area of the same color with the currently selected color.</li>
                 <li><b>Select Fragment <span class="hotkey-tag">S</span>:</b> Click and drag to select a specific rectangular area. Press <span class="hotkey-tag">Ctrl+C</span> to copy, and <span class="hotkey-tag">Ctrl+V</span> to paste it anywhere on the canvas.</li>
+            <li><b>Hide Grid:</b> Check the "Hide Grid" box on the top toolbar to remove the grid lines and preview your sprite as it will look on a real CRT.</li>
             </ul>
 
             <h3>3. Animation & Frame Control</h3>
@@ -187,6 +189,7 @@
             <ul>
                 <li><b>Mirror H / V:</b> Flips the sprite horizontally or vertically. You can apply it to the entire sequence or just a single specific frame. <span class="example">Example: Drawing a character facing right, then duplicating the frame and applying Mirror H to make them face left.</span></li>
                 <li><b>Rotate 90º:</b> Rotates the canvas data by 90 degrees clockwise.</li>
+                <li><b>Fix M0 Width:</b> Special tool for Mode 0. It halves the canvas width, compressing the pixels. <span class="example">Example: You drew a 32-width Mode 0 sprite, but CPC Mode 0 pixels are double-width, meaning you only needed 16 bytes. This fixes it instantly without redrawing.</span></li>
                 <li><b>Shift Mode <span class="hotkey-tag">✥</span>:</b> Click this to activate. When active, use the Keyboard Arrow keys to nudge the pixels of the currently hovered frame 1 pixel in any direction. <span class="example">Example: Fixing a sprite that was drawn slightly off-center without redrawing it.</span></li>
                 <li><b>Full Sprite Shift Checkbox:</b> If checked, using the arrow keys will move the content of ALL frames simultaneously instead of just the hovered one.</li>
             </ul>
@@ -199,13 +202,13 @@
 
             <h3>6. Import & Export Options</h3>
             <ul>
-                <li><b>Paste from Clipboard:</b> Click the clipboard icon, then press <span class="hotkey-tag">Ctrl+V</span> to paste an external image (from Windows/Mac). The tool will prompt for rows/columns to slice a sprite sheet and will auto-map the colors to the closest CPC equivalents.</li>
+                <li><b>Paste from Clipboard:</b> Click the clipboard icon, then press <span class="hotkey-tag">Ctrl+V</span> to paste an external image. The tool maps colors to CPC equivalents. <span class="example">Tip: Check "Ignore Ink 0 on Paste" if you want the imported image's background to remain transparent (Ink 0) on your CPC canvas.</span></li>
                 <li><b>Import (ABASC / 8BP / C):</b> Paste ASM code (`DB`, `DEFB`), BASIC `DATA` lines, or C Arrays (`{0x00, 0xFF}`). The engine automatically decodes the bytes and draws them onto the canvas.</li>
                 <li><b>Export Menu:</b>
                     <ul>
                         <li><b>8BP ASM:</b> Exports row-aligned Assembler code ready for 8BP or standard Z80 dev.</li>
                         <li><b>Download .BIN:</b> Raw binary memory dump of the screen.</li>
-                        <li><b>Download .DSK:</b> Generates a fully bootable Amstrad CPC floppy disk image. It includes a basic loader that configures the palette and paints/animates your graphics automatically.</li>
+                        <li><b>Download .DSK:</b> Generates a bootable floppy disk with a BASIC loader. You can choose <b>Animated</b> (hardware loop) or <b>Static Frame Strip</b>. <span class="example">Note: The editor will warn you if your sprites exceed the ~26KB continuous RAM limit of a standard 64K CPC!</span></li>
                         <li><b>ABASC DATA:</b> Exports structured `DATA` lines using Words for the ABASC compiler.</li>
                     </ul>
                 </li>
@@ -979,7 +982,7 @@ function loadProject(i) {
 
 document.addEventListener("DOMContentLoaded", () => { 
     startNewProject(true); document.querySelectorAll('.toolbar input:not(#full-shift-cb, #hide-grid-cb, #transparent-bg-cb)').forEach(i => {
-        if (i.id === 'nf') { i.onfocus = () => { previousNfValue = i.value; }; i.onchange = () => { document.getElementById('new-project-msg').innerText = `Cambio a ${i.value} frames.`; document.getElementById('new-project-overlay').style.display = 'flex'; };
+        if (i.id === 'nf') { i.onfocus = () => { previousNfValue = i.value; }; i.onchange = () => { document.getElementById('new-project-msg').innerText = `¿Cambiar a ${i.value} frames? Esto BORRARÁ el lienzo actual.`; document.getElementById('new-project-overlay').style.display = 'flex'; };
         } else i.onchange = () => initGrid(true);
     }); 
 });
