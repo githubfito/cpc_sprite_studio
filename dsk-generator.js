@@ -66,17 +66,17 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed) {
     const wBytes = Math.ceil(fw / ppb);
 
     const palette = fModes[mode];
-    const inkLine = "30 " + palette.map((hw, idx) => `INK ${idx},${hw}`).join(":");
+    const inkLine = "30 " + palette.map((hw, idx) => `INK ${idx},${hw}`).join(":") + ":BORDER 0";
     
     let loader = "";
     if (!animate) {
-        loader = `10 MEMORY &3FFF\r\n20 MODE ${mode}\r\n${inkLine}\r\n40 LOAD "SCREEN.BIN",&C000\r\n50 CALL &BB18\r\n60 GOTO 60\r\n\x1A`;
+        loader = `10 MEMORY &3FFF\r\n20 MODE ${mode}\r\n25 PRINT"Please wait..."\r\n${inkLine}\r\n40 LOAD "SCREEN.BIN",&C000\r\n50 CALL &BB18\r\n60 GOTO 60\r\n\x1A`;
     } else {
         const delay = Math.max(1, Math.floor(animSpeed / 20));
         const safeY = Math.max(0, Math.floor((200 - fh) / 2));
         const maxPx = Math.max(0, 80 - wBytes);
         const dxInit = maxPx > 0 ? 1 : 0;
-        loader = `10 MEMORY &3EFF\r\n20 MODE ${mode}\r\n${inkLine}\r\n40 LOAD "SCREEN.BIN",&4000\r\n` +
+        loader = `10 MEMORY &3EFF\r\n20 MODE ${mode}\r\n25 PRINT"Please wait..."\r\n${inkLine}\r\n40 LOAD "SCREEN.BIN",&4000\r\n` +
                  `50 FOR i=0 TO 67: READ a: POKE &3F00+i, a: NEXT i\r\n` +
                  `51 DATA 221,110,8,221,102,9,221,78,6,221,70,0,197,229,120,230\r\n` +
                  `52 DATA 7,7,7,7,246,192,87,30,0,120,203,63,203,63,203\r\n` +
