@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>CPC Sprite Studio - Zoom & Speed</title>
+    <style>
+        :root { --cpc-cyan: #00adef; --cpc-dark: #111; }
+        body { font-family: 'Courier New', monospace; background: var(--cpc-dark); color: #eee; margin: 0; display: flex; flex-direction: column; align-items: center; }
+        header { background: #000; width: 100%; padding: 10px; border-bottom: 2px solid var(--cpc-cyan); text-align: center; }
+        
+        .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: #222; padding: 15px; border-bottom: 1px solid #444; justify-content: center; align-items: center; }
+        .group { display: flex; align-items: center; gap: 8px; border-right: 1px solid #444; padding-right: 12px; font-size: 14px; }
+        .group:last-child { border: none; }
+        
+        #canvas-wrapper { background: #333; padding: 20px; max-width: 95vw; max-height: 50vh; overflow: auto; margin: 20px 0; border: 1px solid #555; }
+        
+        .grid { 
+            display: grid; 
+            background: #000; 
+            position: relative; 
+            border: 2px solid #555; 
+            width: fit-content;
+            margin: 0 auto;
+        }
+        
+        .pixel { border: 1px solid rgba(255,255,255,0.05); box-sizing: border-box; }
+        .pixel:hover { border: 1px solid var(--cpc-cyan); }
+        .f-guide { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255, 165, 0, 0.8); pointer-events: none; z-index: 10; }
+
+        /* Ratios Amstrad CPC */
+        .m0 .pixel { width: 24px; height: 12px; }
+        .m1 .pixel { width: 12px; height: 12px; }
+        .m2 .pixel { width: 6px; height: 12px; }
+
+        .pal { display: flex; gap: 4px; margin: 10px; background: #000; padding: 10px; border: 1px solid #444; }
+        .c-box { width: 30px; height: 30px; border: 2px solid #444; cursor: pointer; }
+        .c-box.sel { border-color: #fff; outline: 2px solid var(--cpc-cyan); }
+        
+        button { background: #444; color: #fff; border: 1px solid #666; padding: 8px 15px; cursor: pointer; font-weight: bold; }
+        button.play { background: var(--cpc-cyan); color: #000; border: none; }
+        
+        #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; }
+        #canv-cont { border: 4px solid #444; background: #000; image-rendering: pixelated; position: relative; padding: 10px; transition: all 0.2s; }
+        #anim-info { position: absolute; top: -45px; left: 10px; color: var(--cpc-cyan); font-weight: bold; font-size: 13px; line-height: 1.4; }
+        
+        .footer-tips { font-size: 11px; color: #777; margin: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <header><h1>CPC SPRITE STUDIO</h1></header>
+
+    <div class="toolbar">
+        <div class="group">
+            FRAME: <input type="number" id="fw" value="16" style="width:45px"> x <input type="number" id="fh" value="20" style="width:45px">
+        </div>
+        <div class="group">
+            Nº FRAMES: <input type="number" id="nf" value="2" style="width:40px">
+        </div>
+        <div class="group">
+            MODO: 
+            <select id="mode">
+                <option value="0">0 (16 col)</option>
+                <option value="1" selected>1 (4 col)</option>
+                <option value="2">2 (2 col)</option>
+            </select>
+        </div>
+        <button class="play" onclick="initGrid()">GENERAR</button>
+        <button onclick="playAnim()">ANIMAR</button>
+        <button onclick="exportar()" style="background:#27ae60">DATA</button>
+    </div>
+
+    <div id="pal" class="pal"></div>
+
+    <div id="canvas-wrapper">
+        <div id="grid" class="grid"></div>
+    </div>
+
+    <div class="footer-tips">
+        Animación: [+] [-] Velocidad | [0-9] Tamaño Zoom.
+    </div>
+
+    <div id="overlay">
+        <div id="canv-cont">
+            <div id="anim-info">Vel: 150ms | Zoom: x4</div>
+            <canvas id="canvas"></canvas>
+        </div>
+        <button onclick="closeAnim()" style="margin-top:40px; background:#f00; border:none; color:white; padding:10px 20px; cursor:pointer; font-weight:bold;">VOLVER AL EDITOR</button>
+    </div>
+
+    <script>
+        const cpcPal = ["#000000","#000080","#0000FF","#800000","#800080","#8000FF","#FF0000","#FF0080","#FF00FF","#008000","#008080","#0080FF","#808000","#808080","#8080FF","#FF8000","#FF8080","#FF80FF","#00FF00","#00FF80","#00FFFF","#80FF00","#80FF80","#80FFFF","#FFFF00","#FFFF80","#FFFFFF"];
+        
+        let mode = 1, pen = 0, drawing = false, timer = null;
+        let animSpeed = 150;
+        let animZoom = 4; // Zoom inicial
+
+        function getModeColors() {
+            if (mode == 1) return ["#000080", "#FFFF00", "#0000FF", "#FF0000"];
+            if (mode == 2) return ["#000080", "#FFFF00"];
+            return ["#000080","#FFFF00","#00FFFF","#FF00FF","#000000","#000080","#0000FF","#800000","#800080","#8000FF","#FF0000","#FF0080","#FF00FF","#008000","#008080","#0080FF"];
+        }
+
+        function buildPal() {
+            const box = document.getElementById('pal');
+            box.innerHTML = '';
+            let colors = getModeColors();
+            colors.forEach((c, i) => {
+                let d = document.createElement('div');
+                d.className = 'c-box' + (i == pen ? ' sel' : '');
+                d.style.background = c;
+                d.onclick = () => { pen = i; buildPal(); };
+                box.appendChild(d);
+            });
+        }
+
+        function initGrid() {
+            mode = parseInt(document.getElementById('mode').value);
+            const fw = parseInt(document.getElementById('fw').value);
+            const fh = parseInt(document.getElementById('fh').value);
+            const nf = parseInt(document.getElementById('nf').value);
+            const totalW = fw * nf;
+            const g = document.getElementById('grid');
+            const colors = getModeColors();
+            
+            pen = 0;
+            buildPal();
+
+            g.innerHTML = '';
+            g.className = `grid m${mode}`;
+            g.style.gridTemplateColumns = `repeat(${totalW}, auto)`;
+
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < totalW * fh; i++) {
+                const p = document.createElement('div');
+                p.className = 'pixel';
+                p.style.background = colors[0];
+                p.dataset.pen = 0;
+                p.onmousedown = (e) => { e.preventDefault(); drawing = true; paint(p); };
+                p.onmouseenter = () => { if(drawing) paint(p); };
+                fragment.appendChild(p);
+            }
+            g.appendChild(fragment);
+
+            const pxSize = mode == 0 ? 24 : (mode == 1 ? 12 : 6);
+            for (let i = 1; i < nf; i++) {
+                const guide = document.createElement('div');
+                guide.className = 'f-guide';
+                guide.style.left = (i * fw * pxSize) + "px";
+                g.appendChild(guide);
+            }
+        }
+
+        function paint(el) {
+            let colors = getModeColors();
+            el.style.background = colors[pen];
+            el.dataset.pen = pen;
+        }
+
+        function playAnim() {
+            document.getElementById('overlay').style.display = 'flex';
+            renderFrame();
+        }
+
+        function renderFrame() {
+            const fw = parseInt(document.getElementById('fw').value);
+            const fh = parseInt(document.getElementById('fh').value);
+            const nf = parseInt(document.getElementById('nf').value);
+            const tw = fw * nf;
+            const canv = document.getElementById('canvas');
+            const ctx = canv.getContext('2d');
+            const pixels = document.querySelectorAll('.pixel');
+
+            canv.width = fw; canv.height = fh;
+            let ratio = mode == 0 ? 2 : (mode == 1 ? 1 : 0.5); // Relación base CPC
+            
+            // Ajuste de tamaño por zoom
+            canv.style.width = (fw * ratio * animZoom * 2) + "px"; 
+            canv.style.height = (fh * animZoom * 2) + "px";
+
+            document.getElementById('anim-info').innerText = `Vel: ${animSpeed}ms (+/-) | Zoom: x${animZoom} (0-9)`;
+
+            let f = 0;
+            if(timer) clearInterval(timer);
+            timer = setInterval(() => {
+                ctx.clearRect(0,0,fw,fh);
+                for(let y = 0; y < fh; y++){
+                    for(let x = 0; x < fw; x++){
+                        const idx = y * tw + (f * fw + x);
+                        if(pixels[idx]){
+                            ctx.fillStyle = pixels[idx].style.background;
+                            ctx.fillRect(x,y,1,1);
+                        }
+                    }
+                }
+                f = (f + 1) % nf;
+            }, animSpeed);
+        }
+
+        // Control por teclado
+        window.onkeydown = (e) => {
+            if (document.getElementById('overlay').style.display === 'flex') {
+                // Control de Velocidad
+                if (e.key === '+' || e.key === '=') {
+                    animSpeed = Math.max(10, animSpeed - 10);
+                    renderFrame();
+                }
+                if (e.key === '-' || e.key === '_') {
+                    animSpeed = Math.min(2000, animSpeed + 10);
+                    renderFrame();
+                }
+                
+                // Control de Zoom (Teclas 0-9)
+                if (e.key >= '0' && e.key <= '9') {
+                    // Si es 0, ponemos un zoom grande (10), si no, el número pulsado
+                    animZoom = e.key === '0' ? 12 : parseInt(e.key);
+                    renderFrame();
+                }
+            }
+        };
+
+        function closeAnim() { 
+            clearInterval(timer); 
+            document.getElementById('overlay').style.display='none'; 
+        }
+
+        function exportar() {
+            const pixels = document.querySelectorAll('.pixel');
+            const data = Array.from(pixels).map(p => parseInt(p.dataset.pen));
+            let txt = "10 ' CPC SPRITE DATA\n";
+            for(let i=0; i<data.length; i+=8) {
+                txt += (20+i) + " DATA " + data.slice(i, i+8).map(v => "&"+v.toString(16).toUpperCase()).join(",") + "\n";
+            }
+            const w = window.open();
+            w.document.write("<pre>"+txt+"</pre>");
+        }
+
+        window.onmouseup = () => drawing = false;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const savedSpeed = localStorage.getItem('cpc_anim_speed');
+            if (savedSpeed) animSpeed = parseInt(savedSpeed);
+            initGrid();
+        });
+    </script>
+</body>
+</html>

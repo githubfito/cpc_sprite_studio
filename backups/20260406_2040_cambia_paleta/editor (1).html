@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>CPC Sprite Studio - JS Edition</title>
+    <script src="dsk-generator.js"></script>
+    <style>
+        :root { --cpc-cyan: #00adef; --cpc-dark: #111; --sidebar-w: 65px; }
+        body { font-family: 'Courier New', monospace; background: var(--cpc-dark); color: #eee; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background: #000; width: 100%; padding: 10px 0; border-bottom: 2px solid var(--cpc-cyan); display: flex; justify-content: space-around; align-items: center; flex-shrink: 0; z-index: 100; }
+        #file-status { font-size: 11px; color: #aaa; text-align: right; border-left: 1px solid #444; padding-left: 15px; }
+        #file-status b { color: var(--cpc-cyan); }
+        .main-container { display: flex; flex: 1; overflow: hidden; position: relative; }
+        .sidebar { width: var(--sidebar-w); background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding: 15px 0; gap: 12px; flex-shrink: 0; overflow-y: auto; z-index: 95; }
+        .side-btn { width: 44px; height: 44px; background: #333; border: 1px solid #555; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: 0.2s; position: relative; }
+        .side-btn:hover { background: var(--cpc-cyan); color: #000; border-color: #fff; }
+        .side-btn.active { background: var(--cpc-cyan); color: #000; border-color: #fff; box-shadow: 0 0 10px rgba(0,173,239,0.5); }
+        .side-btn .hotkey { position: absolute; bottom: 2px; right: 3px; font-size: 9px; color: #f1c40f; font-weight: bold; pointer-events: none; }
+        .workspace { flex: 1; position: relative; overflow: hidden; background: #333; display: flex; flex-direction: column; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: #222; padding: 10px 20px; border-bottom: 1px solid #444; justify-content: center; align-items: center; width: 100%; box-sizing: border-box; z-index: 80; }
+        .group { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border-right: 1px solid #444; padding-right: 12px; }
+        .label-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        #byte-info { font-size: 9px; color: var(--cpc-cyan); font-style: italic; white-space: nowrap; }
+        #current-frame-info { font-size: 9px; color: #f1c40f; font-weight: bold; white-space: nowrap; margin-top: 2px; }
+        input, select { background: #000; color: #fff; border: 1px solid #555; padding: 2px; font-family: monospace; }
+        #viewport { flex: 1; overflow: hidden; position: relative; display: flex; justify-content: center; align-items: center; background: #2a2a2a; }
+        #canvas-panner { position: absolute; transform-origin: center; display: flex; justify-content: center; align-items: center; will-change: transform; }
+        .grid { display: grid; background: #000; position: relative; border: 2px solid #555; cursor: crosshair; user-select: none; margin-top: 20px; }
+        .pixel { border: 1px solid rgba(255,255,255,0.05); box-sizing: border-box; position: relative; }
+        .grid.hide-lines .pixel { border: none !important; }
+        .pixel.preview::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.4); z-index: 5; }
+        .pixel.select-preview::after { content: ''; position: absolute; inset: 0; background: rgba(241, 196, 15, 0.3); border: 1px dashed #f1c40f; z-index: 5; }
+        .f-guide { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255, 165, 0, 0.8); pointer-events: none; z-index: 10; overflow: visible; }
+        .f-label { position: absolute; top: -18px; left: 2px; background: #444; color: var(--cpc-cyan); font-size: 9px; padding: 1px 4px; border: 1px solid var(--cpc-cyan); white-space: nowrap; font-weight: bold; }
+        .m0 .pixel { width: 24px; height: 12px; }
+        .m1 .pixel { width: 12px; height: 12px; }
+        .m2 .pixel { width: 6px; height: 12px; }
+        .pal { display: flex; gap: 4px; padding: 10px; background: #000; border-top: 1px solid #444; width: 100%; justify-content: center; z-index: 80; }
+        .c-box { width: 25px; height: 25px; border: 2px solid #444; cursor: pointer; }
+        .c-box.sel { border-color: #fff; outline: 2px solid var(--cpc-cyan); }
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; }
+        .modal { background: #222; padding: 30px; border: 2px solid var(--cpc-cyan); display: flex; flex-direction: column; gap: 15px; width: 420px; text-align: center; }
+        .modal button { background: #333; border: 1px solid #555; padding: 10px; color: white; cursor: pointer; font-weight: bold; width: 100%; }
+        #anim-window { display: none; position: absolute; top: 100px; left: 150px; background: #000; border: 3px solid var(--cpc-cyan); z-index: 2000; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .win-header { background: var(--cpc-cyan); color: #000; padding: 5px 10px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none; }
+        #canvas { image-rendering: pixelated; background: #000; display: block; margin: 0 auto; }
+        #shift-mode-indicator, #select-mode-indicator { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 173, 239, 0.9); color: #000; padding: 10px 30px; font-size: 24px; font-weight: bold; border-radius: 8px; pointer-events: none; z-index: 1000; display: none; box-shadow: 0 0 20px rgba(0, 173, 239, 0.8); border: 2px solid #fff; }
+        #select-mode-indicator { background: rgba(241, 196, 15, 0.9); }
+        
+        .hw-item { display: flex; align-items: center; gap: 10px; background: #1a1a1a; padding: 6px; border: 1px solid #444; border-radius: 4px; cursor: pointer; }
+        .hw-item:hover { background: #333; }
+        .hw-swatch { width: 30px; height: 30px; border: 1px solid #fff; flex-shrink: 0; }
+        .hw-info { text-align: left; line-height: 1.2; }
+        .hw-num { color: #f1c40f; font-weight: bold; font-size: 13px; }
+        .hw-name { color: #aaa; font-size: 10px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1 style="margin:0">CPC SPRITE STUDIO</h1>
+    <div id="file-status">Archivo: <b>Ninguno</b> | Último acceso: <b>---</b></div>
+</header>
+
+<div class="main-container">
+    <aside class="sidebar">
+        <button class="side-btn" style="color:#2ecc71" onclick="saveProject()" title="Save Project"><i>💾</i></button>
+        <button class="side-btn" style="color:#f1c40f" onclick="triggerLoad()" title="Load Project"><i>📂</i></button>
+        <button class="side-btn" style="color:var(--cpc-cyan)" onclick="showHardwareColors()" title="Hardware List"><i>PAL</i></button>
+        <input type="file" id="load-input" style="display:none" accept=".json" onchange="loadProject(this)">
+        <hr style="width:70%; border:0; border-top:1px solid #444;">
+        <button class="side-btn tool-btn active" id="btn-pen" onclick="setTool('pen')" title="Pen Tool (P)"><i>✎</i><span class="hotkey">P</span></button>
+        <button class="side-btn tool-btn" id="btn-line" onclick="setTool('line')" title="Line Tool (/)"><i>/</i><span class="hotkey">/</span></button>
+        <button class="side-btn tool-btn" id="btn-box" onclick="setTool('box')" title="Box Tool (R)"><i>□</i><span class="hotkey">R</span></button>
+        <button class="side-btn tool-btn" id="btn-circle" onclick="setTool('circle')" title="Circle Tool (C)"><i>○</i><span class="hotkey">C</span></button>
+        <button class="side-btn tool-btn" id="btn-select" onclick="setTool('select')" title="Select Fragment (S)"><i>⬚</i><span class="hotkey">S</span></button>
+        <button class="side-btn tool-btn" id="btn-fill" onclick="setTool('fill')" title="Paint Bucket (G)"><i>▅</i><span class="hotkey">G</span></button>
+        <hr style="width:70%; border:0; border-top:1px solid #444;">
+        <button class="side-btn" onclick="addFrame()" title="Add Frame"><i>+F</i></button>
+        <button class="side-btn" onclick="removeFrame()" title="Remove Frame"><i>-F</i></button>
+        <button class="side-btn" onclick="pasteFromClipboard()" title="Paste Image from Clipboard"><i>📋</i></button>
+        <button class="side-btn" onclick="openMirrorMenu('H')" title="Mirror H"><i>↔</i><span class="hotkey">H</span></button>
+        <button class="side-btn" onclick="openMirrorMenu('V')" title="Mirror V"><i>↕</i><span class="hotkey">V</span></button>
+        <button class="side-btn" onclick="openRotateMenu()" title="Rotate 90º"><i>⟳</i><span class="hotkey">T</span></button>
+        <button class="side-btn" id="btn-shift-mode" onclick="toggleShiftMode()" title="Toggle Shift Mode (Use Arrows)"><i>✥</i></button>
+        <button class="side-btn" onclick="initGrid(true)" title="Wipe Canvas"><i>♻</i></button>
+    </aside>
+
+    <div class="workspace">
+        <div class="toolbar">
+            <div class="group">
+                <div class="label-row">DIM: <input type="number" id="fw" value="16" style="width:40px">x<input type="number" id="fh" value="16" style="width:40px"></div>
+            </div>
+            <div class="group">
+                <div class="label-row">FRAMES: <input type="number" id="nf" value="1" style="width:35px"></div>
+                <div id="current-frame-info">Current Frame: 0</div>
+            </div>
+            <div class="group">
+                <div class="label-row">MODE: 
+                    <select id="mode" onchange="updateByteInfo(); initGrid(true);">
+                        <option value="0">0</option>
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
+                    </select>
+                </div>
+                <div id="byte-info">1 byte = 4 pixels (320x200)</div>
+            </div>
+            <button onclick="fixMode0Width()" style="background:#e67e22; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none; margin-right:5px;" title="Reduce ancho a la mitad (Solo Modo 0)">FIX M0 WIDTH</button>
+            <button onclick="playAnim()" style="background:#8e44ad; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none; margin-right:5px;">ANIMATE</button>
+            <button onclick="showImportMenu()" style="background:#2980b9; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none; margin-right:5px;">IMPORT</button>
+            <button onclick="showExportMenu()" style="background:#27ae60; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none;">EXPORT</button>
+            
+            <div style="display:flex; align-items:center; gap:12px; font-size:11px; color:#aaa; margin-left:10px;">
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <input type="checkbox" id="full-shift-cb">
+                    <label for="full-shift-cb" style="cursor:pointer;">Enable full sprite shift</label>
+                </div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <input type="checkbox" id="transparent-bg-cb">
+                    <label for="transparent-bg-cb" style="cursor:pointer;">Ignore Ink 0 on Paste</label>
+                </div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <input type="checkbox" id="hide-grid-cb" onchange="toggleGridLines()">
+                    <label for="hide-grid-cb" style="cursor:pointer;">Hide Grid</label>
+                </div>
+            </div>
+        </div>
+
+        <div id="viewport">
+            <div id="shift-mode-indicator">SHIFT FRAME MODE (Usa las flechas)</div>
+            <div id="select-mode-indicator">SELECT FRAGMENT (Ctrl+C/V)</div>
+            <div id="canvas-panner">
+                <div id="grid" class="grid"></div>
+            </div>
+        </div>
+        <div id="pal" class="pal"></div>
+    </div>
+</div>
+
+<div id="import-overlay" class="overlay">
+    <div class="modal" style="width: 650px;">
+        <h2>IMPORT DATA (ABASC / 8BP)</h2>
+        <div style="text-align: left; font-size: 11px; color: #f1c40f; margin-bottom: 10px; background: #333; padding: 10px; border: 1px solid #444;">
+            <b>ABASC:</b> LABEL nombre: (Data &HHLW, Data &Word, ...)<br>
+            <b>8BP:</b> .nombre (db ancho, db alto, db byte, byte, ...)<br>
+            <i>* Se asumen los 2 primeros bytes como Ancho(bytes) y Alto si no hay comentarios explícitos.</i>
+        </div>
+        <textarea id="import-area" style="width: 100%; height: 280px; background: #000; color: #2ecc71; border: 1px solid #444; font-family: monospace; padding: 10px; box-sizing: border-box; resize: none;"></textarea>
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button onclick="processImport()" style="background:#2ecc71; color:white;">PROCESAR E IMPORTAR</button>
+            <button onclick="closeImport()" style="background:#500; color:white">CANCELAR</button>
+        </div>
+    </div>
+</div>
+
+<div id="export-overlay" class="overlay">
+    <div class="modal">
+        <h2>EXPORT DATA</h2>
+        <button onclick="doExport8BP()" style="background:#2ecc71; color:white;">1) 8BP ASM (ROW ALIGNED)</button>
+        <button onclick="exportBinary()" style="background:#3498db; color:white;">2) DOWNLOAD .BIN (SCREEN)</button>
+        <button onclick="exportDSK()" style="background:#d35400; color:white;">3) DOWNLOAD .DSK (CON LOADER)</button>
+        <button onclick="doExportABASC()" style="background:#f1c40f; color:black; font-weight:bold;">4) ABASC DATA (WORDS)</button>
+        <button onclick="closeExport()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
+    </div>
+</div>
+
+<div id="dsk-export-overlay" class="overlay">
+    <div class="modal">
+        <h2>MODO DSK</h2>
+        <button onclick="doExportDSK(true)" style="background:#8e44ad; color:white;">1) ANIMACIÓN POR HARDWARE (BASIC)</button>
+        <button onclick="doExportDSK(false)" style="background:#d35400; color:white;">2) TIRA DE FRAMES ESTÁTICA</button>
+        <button onclick="closeDSKMenu()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
+    </div>
+</div>
+
+<div id="mirror-overlay" class="overlay">
+    <div class="modal" style="width:320px;">
+        <h2 id="mirror-title">ESPEJO</h2>
+        <button onclick="doMirror('all')" style="background:#3498db; color:white;">1) ESPEJO DE TODOS</button>
+        <button onclick="doMirror('custom')" style="background:#9b59b6; color:white;">2) ESPEJO CUSTOM (ELEGIR)</button>
+        <button onclick="closeMirrorMenu()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
+    </div>
+</div>
+
+<div id="rotate-overlay" class="overlay">
+    <div class="modal" style="width:320px;">
+        <h2>ROTAR 90º</h2>
+        <button onclick="doRotate('all')" style="background:#3498db; color:white;">1) ROTAR TODOS</button>
+        <button onclick="doRotate('custom')" style="background:#9b59b6; color:white;">2) ROTAR CUSTOM (ELEGIR)</button>
+        <button onclick="closeRotateMenu()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
+    </div>
+</div>
+
+<div id="new-project-overlay" class="overlay">
+    <div class="modal">
+        <h2 id="new-project-msg" style="color: #e74c3c; font-size: 18px;"></h2>
+        <button onclick="confirmNewProject()" style="background:#2ecc71; color:white;">SÍ, comenzar proyecto</button>
+        <button onclick="cancelNewProject()" style="background:#c0392b; color:white;">NO, volver donde estaba</button>
+    </div>
+</div>
+
+<div id="hw-colors-overlay" class="overlay">
+    <div class="modal" style="width: 550px; max-height: 85vh; overflow-y: auto;">
+        <h2 id="hw-title">AMSTRAD CPC HARDWARE COLORS</h2>
+        <div id="hw-colors-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 10px;"></div>
+        <button onclick="closeHardwareColors()" style="background:#500; margin-top:10px; color:white">CERRAR</button>
+    </div>
+</div>
+
+<div id="anim-window">
+    <div id="win-handle" class="win-header">
+        <span>ANIMATOR</span>
+        <button onclick="closeAnim()" style="background:#f00; border:1px solid #a00; color:#fff; cursor:pointer; font-weight:bold;">X</button>
+    </div>
+    <div style="padding:15px; text-align:center;">
+        <canvas id="canvas"></canvas>
+        <div id="anim-status" style="margin-top:8px; font-size:11px; color:var(--cpc-cyan);"></div>
+    </div>
+</div>
+
+<script>
+let mode = 1, pen = 0, drawing = false, currentTool = 'pen', startCoords = null, previewPixels = [];
+let scale = 1, posX = 0, posY = 0, isPanning = false;
+let animTimer = null, animSpeed = 500, animZoom = 8;
+let isAnimDragging = false, animOffset = [0, 0];
+let mirrorDir = 'H', previousNfValue = 1, currentHoveredFrame = 0, isShiftMode = false, lastMirrorTime = 0, lastRotateTime = 0;
+let undoStack = [], currentConfig = { fw: 16, fh: 16, nf: 1, mode: 1 };
+let clipboardData = null;
+let currentPalIndexToEdit = -1;
+
+const cpcPal = ["#000000", "#000080", "#0000FF", "#800000", "#800080", "#8000FF", "#FF0000", "#FF0080", "#FF00FF", "#008000", "#008080", "#0080FF", "#808000", "#808080", "#8080FF", "#FF8000", "#FF8080", "#FF80FF", "#00FF00", "#00FF80", "#00FFFF", "#80FF00", "#80FF80", "#80FFFF", "#FFFF00", "#FFFF80", "#FFFFFF"];
+const cpcHardwareNames = ["Black", "Blue", "Bright Blue", "Red", "Magenta", "Mauve", "Bright Red", "Purple", "Bright Magenta", "Green", "Cyan", "Sky Blue", "Yellow", "White", "Pastel Blue", "Bright Orange", "Pink", "Pastel Magenta", "Bright Green", "Sea Green", "Bright Cyan", "Lime Green", "Pastel Green", "Pastel Cyan", "Bright Yellow", "Pastel Yellow", "Bright White"];
+
+// Paletas por defecto
+let fModes = { 0: [1, 24, 20, 6, 26, 0, 2, 8, 10, 12, 14, 16, 18, 22, 25, 15], 1: [1, 24, 20, 6], 2: [1, 24] };
+
+function showHardwareColors(editIndex = -1) {
+    currentPalIndexToEdit = editIndex;
+    const overlay = document.getElementById('hw-colors-overlay');
+    const container = document.getElementById('hw-colors-grid');
+    const title = document.getElementById('hw-title');
+    
+    title.innerText = editIndex === -1 ? "AMSTRAD CPC HARDWARE COLORS" : `CHANGE COLOR FOR PEN ${editIndex}`;
+    container.innerHTML = '';
+    
+    cpcPal.forEach((hex, i) => {
+        const item = document.createElement('div');
+        item.className = 'hw-item';
+        item.onclick = () => {
+            if (currentPalIndexToEdit !== -1) {
+                fModes[mode][currentPalIndexToEdit] = i;
+                refreshColors();
+                closeHardwareColors();
+            }
+        };
+        item.innerHTML = `<div class="hw-swatch" style="background: ${hex}"></div><div class="hw-info"><div class="hw-num">#${i}</div><div class="hw-name">${cpcHardwareNames[i]}</div></div>`;
+        container.appendChild(item);
+    });
+    overlay.style.display = 'flex';
+}
+
+function refreshColors() {
+    const pixels = document.querySelectorAll('.pixel');
+    const colors = getColors();
+    pixels.forEach(p => {
+        const penVal = parseInt(p.dataset.pen);
+        p.style.background = colors[penVal];
+    });
+    buildPal();
+}
+
+function closeHardwareColors() { 
+    document.getElementById('hw-colors-overlay').style.display = 'none'; 
+    currentPalIndexToEdit = -1;
+}
+
+function toggleGridLines() {
+    const grid = document.getElementById('grid');
+    const hide = document.getElementById('hide-grid-cb').checked;
+    if (hide) grid.classList.add('hide-lines');
+    else grid.classList.remove('hide-lines');
+}
+
+function fixMode0Width() {
+    if (mode !== 0) {
+        alert("Esta función solo está disponible en MODE 0.");
+        return;
+    }
+    const fwInput = document.getElementById('fw');
+    const oldFw = parseInt(fwInput.value);
+    const fh = parseInt(document.getElementById('fh').value);
+    const nf = parseInt(document.getElementById('nf').value);
+    if (oldFw % 2 !== 0) {
+        alert("El ancho debe ser par para reducirlo a la mitad.");
+        return;
+    }
+    if (!confirm(`Esto reducirá el ancho de cada frame de ${oldFw} a ${oldFw/2} píxeles. ¿Continuar?`)) return;
+    saveState();
+    let d = getFullData();
+    const newFw = oldFw / 2;
+    const totalW_new = newFw * nf;
+    let newData = Array.from({ length: fh }, () => new Array(totalW_new).fill(0));
+    for (let y = 0; y < fh; y++) {
+        for (let f = 0; f < nf; f++) {
+            let startX_old = f * oldFw;
+            let startX_new = f * newFw;
+            for (let x = 0; x < newFw; x++) {
+                newData[y][startX_new + x] = d[y][startX_old + (x * 2)];
+            }
+        }
+    }
+    fwInput.value = newFw;
+    initGrid(false); 
+    restoreData(newData);
+}
+
+async function pasteFromClipboard() {
+    alert("Ahora pulsa Ctrl+V para pegar la imagen del portapapeles.");
+    window.addEventListener('paste', handlePasteEvent, { once: true });
+}
+
+function handlePasteEvent(e) {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf("image") !== -1) {
+            const blob = items[i].getAsFile();
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => processPastedImage(img);
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(blob);
+            break;
+        }
+    }
+}
+
+function processPastedImage(img) {
+    const rows = parseInt(prompt("¿Cuántas FILAS de frames tiene la imagen?", "1")) || 1;
+    const cols = parseInt(prompt("¿Cuántos FRAMES hay por cada fila?", "1")) || 1;
+    saveState();
+    const fw = parseInt(document.getElementById('fw').value);
+    const fh = parseInt(document.getElementById('fh').value);
+    const nf = parseInt(document.getElementById('nf').value);
+    const totalW = fw * nf;
+    const cv = document.createElement('canvas');
+    cv.width = img.width; cv.height = img.height;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const imgData = ctx.getImageData(0, 0, img.width, img.height).data;
+    const paletteRGB = getColors().map(hex => {
+        const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+        return { r, g, b };
+    });
+    const pxElements = document.querySelectorAll('.pixel'), colors = getColors();
+    const backgroundRGBA = `${imgData[0]},${imgData[1]},${imgData[2]},${imgData[3]}`;
+    const ignoreInk0 = document.getElementById('transparent-bg-cb').checked;
+    let currentFrame = 0;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (currentFrame >= nf) break;
+            const srcX = c * (img.width / cols);
+            const srcY = r * (img.height / rows);
+            const srcStepX = (img.width / cols) / fw;
+            const srcStepY = (img.height / rows) / fh;
+            for (let y = 0; y < fh; y++) {
+                for (let x = 0; x < fw; x++) {
+                    const sampleX = Math.floor(srcX + (x * srcStepX) + (srcStepX / 2));
+                    const sampleY = Math.floor(srcY + (y * srcStepY) + (srcStepY / 2));
+                    const i = (sampleY * img.width + sampleX) * 4;
+                    const rP = imgData[i], gP = imgData[i+1], bP = imgData[i+2], aP = imgData[i+3];
+                    const rgba = `${rP},${gP},${bP},${aP}`;
+                    const targetIdx = (y * totalW) + (currentFrame * fw + x);
+                    if (!pxElements[targetIdx]) continue;
+                    if (!ignoreInk0 && (aP === 0 || rgba === backgroundRGBA)) {
+                        pxElements[targetIdx].dataset.pen = 0; 
+                        pxElements[targetIdx].style.background = colors[0]; 
+                    } else {
+                        let minDist = Infinity, bestPen = 0;
+                        for (let pIdx = 0; pIdx < paletteRGB.length; pIdx++) {
+                            const col = paletteRGB[pIdx];
+                            const dist = Math.sqrt(Math.pow(rP-col.r,2)+Math.pow(gP-col.g,2)+Math.pow(bP-col.b,2));
+                            if (dist < minDist) { minDist = dist; bestPen = pIdx; }
+                        }
+                        pxElements[targetIdx].dataset.pen = bestPen; 
+                        pxElements[targetIdx].style.background = colors[bestPen]; 
+                    }
+                }
+            }
+            currentFrame++;
+        }
+    }
+}
+
+function saveState() {
+    const px = document.querySelectorAll('.pixel');
+    if (px.length === 0) return;
+    const d = { config: { fw: currentConfig.fw, fh: currentConfig.fh, nf: currentConfig.nf, mode: currentConfig.mode }, pixels: Array.from(px).map(p => parseInt(p.dataset.pen)) };
+    undoStack.push(d); if (undoStack.length > 20) undoStack.shift();
+}
+
+function undo() {
+    if (undoStack.length === 0) return;
+    const d = undoStack.pop();
+    document.getElementById('fw').value = d.config.fw; document.getElementById('fh').value = d.config.fh; document.getElementById('nf').value = d.config.nf; document.getElementById('mode').value = d.config.mode;
+    updateByteInfo(); previousNfValue = d.config.nf; initGrid(false);
+    const px = document.querySelectorAll('.pixel'), colors = getColors();
+    d.pixels.forEach((v, i) => { if(px[i]) { px[i].dataset.pen = v; px[i].style.background = colors[v]; } });
+}
+
+function getColors() { return fModes[mode].map(i => cpcPal[i]); }
+
+function updateByteInfo() {
+    mode = parseInt(document.getElementById('mode').value);
+    const info = mode == 0 ? "1 byte = 2 pixels (160x200)" : mode == 1 ? "1 byte = 4 pixels (320x200)" : "1 byte = 8 pixels (640x200)";
+    document.getElementById('byte-info').innerText = info;
+}
+
+function updateFileStatus(name) {
+    const now = new Date();
+    const timeStr = now.toLocaleDateString() + " " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    document.getElementById('file-status').innerHTML = `Archivo: <b>${name}</b> | Último acceso: <b>${timeStr}</b>`;
+}
+
+function initGrid(conf) {
+    if(conf && !confirm("Wipe canvas?")) return;
+    if(conf) saveState();
+    closeAnim();
+    mode = parseInt(document.getElementById('mode').value);
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    currentConfig = { fw, fh, nf, mode };
+    const totalW = fw * nf, g = document.getElementById('grid');
+    g.innerHTML = ''; g.className = `grid m${mode}`;
+    if (document.getElementById('hide-grid-cb') && document.getElementById('hide-grid-cb').checked) g.classList.add('hide-lines');
+    g.style.gridTemplateColumns = `repeat(${totalW}, auto)`;
+    currentHoveredFrame = 0;
+    document.getElementById('current-frame-info').innerText = 'Current Frame: 0';
+    g.onmouseleave = () => { currentHoveredFrame = 0; document.getElementById('current-frame-info').innerText = 'Current Frame: 0'; };
+    for(let i=0; i < totalW * fh; i++) {
+        const p = document.createElement('div'); p.className = 'pixel'; p.style.background = getColors()[0]; p.dataset.pen = 0;
+        p.onmousedown = (e) => { 
+            if(e.button === 0) { 
+                previewPixels.forEach(pp => { pp.classList.remove('preview'); pp.classList.remove('select-preview'); });
+                if (currentTool !== 'select') previewPixels = [];
+                if (currentTool === 'fill') floodFill(i % totalW, Math.floor(i / totalW), parseInt(p.dataset.pen));
+                else { saveState(); drawing = true; startCoords = {x: i % totalW, y: Math.floor(i / totalW)}; if(currentTool==='pen') paint(p); }
+            } 
+        };
+        p.onmouseenter = () => { 
+            currentHoveredFrame = Math.floor((i % totalW) / fw) + 1;
+            document.getElementById('current-frame-info').innerText = `Current Frame: ${currentHoveredFrame}`;
+            if(drawing) { if(currentTool==='pen') paint(p); else updatePreview(i % totalW, Math.floor(i / totalW)); } 
+        };
+        g.appendChild(p);
+    }
+    let mult = (mode == 0 ? 24 : (mode == 1 ? 12 : 6));
+    for (let i = 0; i < nf; i++) {
+        const guide = document.createElement('div'); guide.className = 'f-guide';
+        guide.style.left = (i * fw * mult) + "px";
+        if(i === 0) guide.style.background = "transparent"; 
+        const lbl = document.createElement('div'); lbl.className = 'f-label';
+        lbl.innerText = `FRAME ${i + 1}`; guide.appendChild(lbl); g.appendChild(guide);
+    }
+    buildPal();
+}
+
+function buildPal() {
+    const b = document.getElementById('pal'); b.innerHTML = '';
+    getColors().forEach((c, i) => {
+        const d = document.createElement('div'); d.className = 'c-box' + (i==pen?' sel':''); d.style.background = c;
+        d.onclick = () => { pen = i; buildPal(); };
+        d.oncontextmenu = (e) => { 
+            e.preventDefault(); 
+            showHardwareColors(i); 
+        };
+        b.appendChild(d);
+    });
+}
+
+function setTool(t) { 
+    previewPixels.forEach(p => { p.classList.remove('preview'); p.classList.remove('select-preview'); });
+    previewPixels = [];
+    currentTool = t; 
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.id==='btn-'+t));
+    document.getElementById('select-mode-indicator').style.display = (t === 'select') ? 'block' : 'none';
+}
+
+function paint(el) { el.style.background = getColors()[pen]; el.dataset.pen = pen; }
+
+function getPixel(x, y) {
+    const fw = parseInt(document.getElementById('fw').value), nf = parseInt(document.getElementById('nf').value);
+    const totalW = fw * nf, fh = parseInt(document.getElementById('fh').value);
+    if(x<0 || x>=totalW || y<0 || y>=fh) return null;
+    return document.getElementById('grid').children[y * totalW + x];
+}
+
+function updatePreview(cx, cy) {
+    previewPixels.forEach(p => { p.classList.remove('preview'); p.classList.remove('select-preview'); }); 
+    previewPixels = [];
+    let coords = [];
+    if(currentTool==='line') coords = bresenham(startCoords.x, startCoords.y, cx, cy);
+    if(currentTool==='box') coords = getBox(startCoords.x, startCoords.y, cx, cy);
+    if(currentTool==='circle') coords = getCircle(startCoords.x, startCoords.y, cx, cy);
+    if(currentTool==='select') coords = getBoxFilled(startCoords.x, startCoords.y, cx, cy);
+    coords.forEach(c => { const p = getPixel(c.x, c.y); if(p){ if(currentTool === 'select') p.classList.add('select-preview'); else p.classList.add('preview'); previewPixels.push(p); } });
+}
+
+function bresenham(x0, y0, x1, y1) {
+    let res = [], dx = Math.abs(x1-x0), sx = x0<x1?1:-1, dy = Math.abs(y1-y0), sy = y0<y1?1:-1, err = (dx>dy?dx:-dy)/2;
+    while(true){ res.push({x:x0, y:y0}); if(x0==x1 && y0==y1) break; let e2=err; if(e2>-dx){err-=dy; x0+=sx;} if(e2<dy){err+=dx; y0+=sy;} }
+    return res;
+}
+function getBox(x0,y0,x1,y1) {
+    let res = [], xmin=Math.min(x0,x1), xmax=Math.max(x0,x1), ymin=Math.min(y0,y1), ymax=Math.max(y0,y1);
+    for(let x=xmin; x<=xmax; x++) res.push({x,y:ymin}, {x,y:ymax});
+    for(let y=ymin; y<=ymax; y++) res.push({x:xmin,y}, {x:xmax,y});
+    return res;
+}
+function getBoxFilled(x0,y0,x1,y1) {
+    let res = [], xmin=Math.min(x0,x1), xmax=Math.max(x0,x1), ymin=Math.min(y0,y1), ymax=Math.max(y0,y1);
+    for(let y=ymin; y<=ymax; y++) { for(let x=xmin; x<=xmax; x++) res.push({x,y}); }
+    return res;
+}
+function getCircle(x0,y0,x1,y1) {
+    let res = [], r = Math.round(Math.sqrt(Math.pow(x1-x0,2)+Math.pow(y1-y0,2))), x=r, y=0, err=1-x;
+    while(x>=y){ res.push({x:x0+x,y:y0+y},{x:x0+y,y:y0+x},{x:x0-y,y:y0+x},{x:x0-x,y:y0+y},{x:x0-x,y:y0-y},{x:x0-y,y:y0-x},{x:x0+y,y:y0-x},{x:x0+x,y:y0-y}); y++; if(err<0) err+=2*y+1; else {x--; err+=2*(y-x)+1;} }
+    return res;
+}
+
+function floodFill(startX, startY, targetPen) {
+    if (targetPen === pen) return;
+    saveState();
+    const fw = parseInt(document.getElementById('fw').value), nf = parseInt(document.getElementById('nf').value);
+    const totalW = fw * nf, fh = parseInt(document.getElementById('fh').value);
+    const px = document.getElementById('grid').children;
+    const colors = getColors();
+    const frameIndex = Math.floor(startX / fw);
+    const frameMinX = frameIndex * fw;
+    const frameMaxX = frameMinX + fw - 1;
+    let queue = [{x: startX, y: startY}], visited = new Set(), key = (x, y) => `${x},${y}`;
+    while (queue.length > 0) {
+        let {x, y} = queue.shift();
+        if (x < frameMinX || x > frameMaxX || y < 0 || y >= fh) continue;
+        if (visited.has(key(x, y))) continue;
+        let p = px[y * totalW + x];
+        if (parseInt(p.dataset.pen) === targetPen) {
+            p.dataset.pen = pen; p.style.background = colors[pen]; visited.add(key(x, y));
+            queue.push({x: x + 1, y: y}, {x: x - 1, y: y}, {x: x, y: y + 1}, {x: x, y: y - 1});
+        }
+    }
+}
+
+function getFullData() {
+    const totalW = parseInt(document.getElementById('fw').value) * parseInt(document.getElementById('nf').value);
+    const fh = parseInt(document.getElementById('fh').value), px = document.querySelectorAll('.pixel'), data = [];
+    for(let y=0; y<fh; y++) { let row = []; for(let x=0; x<totalW; x++) row.push(parseInt(px[y * totalW + x].dataset.pen)); data.push(row); }
+    return data;
+}
+
+function restoreData(data) {
+    const totalW = parseInt(document.getElementById('fw').value) * parseInt(document.getElementById('nf').value);
+    const px = document.querySelectorAll('.pixel'), colors = getColors();
+    data.forEach((row, y) => { row.forEach((v, x) => { const p = px[y * totalW + x]; if(p){ p.dataset.pen = v; p.style.background = colors[v]; } }); });
+}
+
+function copySelection() {
+    if (currentTool !== 'select' || !startCoords || !previewPixels.length) return;
+    const totalW = parseInt(document.getElementById('fw').value) * parseInt(document.getElementById('nf').value);
+    const gridDivs = Array.from(document.getElementById('grid').querySelectorAll('.pixel'));
+    const coords = Array.from(previewPixels).map(p => { const idx = gridDivs.indexOf(p); return { x: idx % totalW, y: Math.floor(idx / totalW) }; });
+    const minX = Math.min(...coords.map(c => c.x)), maxX = Math.max(...coords.map(c => c.x)), minY = Math.min(...coords.map(c => c.y)), maxY = Math.max(...coords.map(c => c.y));
+    clipboardData = { width: (maxX - minX) + 1, height: (maxY - minY) + 1, pixels: [] };
+    for (let y = minY; y <= maxY; y++) {
+        let row = [];
+        for (let x = minX; x <= maxX; x++) { const p = getPixel(x, y); row.push(p ? parseInt(p.dataset.pen) : 0); }
+        clipboardData.pixels.push(row);
+    }
+}
+
+function pasteSelection() {
+    if (!clipboardData || !startCoords) return;
+    saveState(); 
+    const colors = getColors();
+    const ignoreZero = document.getElementById('transparent-bg-cb').checked;
+    clipboardData.pixels.forEach((row, dy) => {
+        row.forEach((penVal, dx) => { 
+            if (ignoreZero && penVal === 0) return;
+            const p = getPixel(startCoords.x + dx, startCoords.y + dy); 
+            if (p) { p.dataset.pen = penVal; p.style.background = colors[penVal]; } 
+        });
+    });
+    previewPixels.forEach(p => p.classList.remove('select-preview'));
+    previewPixels = [];
+}
+
+function addFrame() {
+    const nfInput = document.getElementById('nf');
+    let currentNf = parseInt(nfInput.value), pos = prompt(`¿En qué posición añadir frame? (1 a ${currentNf + 1})`, currentNf + 1);
+    if (!pos) return;
+    pos = parseInt(pos); saveState();
+    let data = getFullData(), fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value);
+    for (let y = 0; y < fh; y++) { let empty = new Array(fw).fill(0); data[y].splice((pos - 1) * fw, 0, ...empty); }
+    nfInput.value = currentNf + 1; initGrid(false); restoreData(data); 
+}
+
+function removeFrame() {
+    const nfInput = document.getElementById('nf');
+    let currentNf = parseInt(nfInput.value); if (currentNf <= 1) return;
+    let pos = prompt(`¿Qué frame borrar? (1 a ${currentNf})`, currentNf); if (!pos) return;
+    pos = parseInt(pos); saveState();
+    let data = getFullData(), fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value);
+    for (let y = 0; y < fh; y++) { data[y].splice((pos - 1) * fw, fw); }
+    nfInput.value = currentNf - 1; initGrid(false); restoreData(data); 
+}
+
+function openMirrorMenu(dir) { mirrorDir = dir; document.getElementById('mirror-overlay').style.display = 'flex'; }
+function closeMirrorMenu() { document.getElementById('mirror-overlay').style.display = 'none'; }
+function doMirror(mode) { closeMirrorMenu(); if (mirrorDir === 'H') flipH(mode); else flipV(mode); }
+
+function flipH(mode) {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    let frames = []; if (mode === 'all') { for(let f = 0; f < nf; f++) frames.push(f); } else { let ans = prompt("¿Qué frame?"); let f = parseInt(ans)-1; frames.push(f); }
+    saveState(); let d = getFullData();
+    for (let y = 0; y < fh; y++) { frames.forEach(f => { let chunk = d[y].slice(f * fw, (f + 1) * fw); chunk.reverse(); d[y].splice(f * fw, fw, ...chunk); }); }
+    restoreData(d);
+}
+
+function flipV(mode) {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    let frames = []; if (mode === 'all') { for(let f = 0; f < nf; f++) frames.push(f); } else { let ans = prompt("¿Qué frame?"); let f = parseInt(ans)-1; frames.push(f); }
+    saveState(); let d = getFullData();
+    for (let y = 0; y < Math.floor(fh / 2); y++) {
+        let oppY = fh - 1 - y;
+        frames.forEach(f => { let top = d[y].slice(f * fw, (f + 1) * fw), bot = d[oppY].slice(f * fw, (f + 1) * fw); d[y].splice(f * fw, fw, ...bot); d[oppY].splice(f * fw, fw, ...top); });
+    }
+    restoreData(d);
+}
+
+function flipHDirect(f) { saveState(); const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value); let d = getFullData(); for (let y = 0; y < fh; y++) { let chunk = d[y].slice(f * fw, (f + 1) * fw); chunk.reverse(); d[y].splice(f * fw, fw, ...chunk); } restoreData(d); }
+function flipVDirect(f) { saveState(); const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value); let d = getFullData(); for (let y = 0; y < Math.floor(fh / 2); y++) { let oppY = fh - 1 - y; let top = d[y].slice(f * fw, (f + 1) * fw), bot = d[oppY].slice(f * fw, (f + 1) * fw); d[y].splice(f * fw, fw, ...bot); d[oppY].splice(f * fw, fw, ...top); } restoreData(d); }
+function openRotateMenu() { document.getElementById('rotate-overlay').style.display = 'flex'; }
+function closeRotateMenu() { document.getElementById('rotate-overlay').style.display = 'none'; }
+
+function doRotate(mode) {
+    closeRotateMenu();
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    let frames = []; if (mode === 'all') { for(let f = 0; f < nf; f++) frames.push(f); } else { let ans = prompt("¿Qué frame?"); let f = parseInt(ans)-1; frames.push(f); }
+    saveState(); let d = getFullData(), old = d.map(row => [...row]); 
+    frames.forEach(f => {
+        let startX = f * fw;
+        for (let dy = 0; dy < fh; dy++) {
+            for (let dx = 0; dx < fw; dx++) { let sx = dy, sy = fh - 1 - dx; d[dy][startX + dx] = (sx >= 0 && sx < fw && sy >= 0 && sy < fh) ? old[sy][startX + sx] : 0; }
+        }
+    });
+    restoreData(d);
+}
+
+function rotateDirect(f) {
+    saveState();
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value);
+    let d = getFullData(), old = d.map(row => [...row]), startX = f * fw;
+    for (let dy = 0; dy < fh; dy++) {
+        for (let dx = 0; dx < fw; dx++) { let sx = dy, sy = fh - 1 - dx; d[dy][startX + dx] = (sx >= 0 && sx < fw && sy >= 0 && sy < fh) ? old[sy][startX + sx] : 0; }
+    }
+    restoreData(d);
+}
+
+function toggleShiftMode() { isShiftMode = !isShiftMode; document.getElementById('shift-mode-indicator').style.display = isShiftMode ? 'block' : 'none'; document.getElementById('btn-shift-mode').classList.toggle('active', isShiftMode); }
+
+function shiftFrameDirect(f, dir) {
+    saveState();
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value);
+    let d = getFullData(), startX = f * fw;
+    if (dir === 'L' || dir === 'R') {
+        for (let y = 0; y < fh; y++) { let chunk = d[y].slice(startX, startX + fw); if (dir === 'L') { chunk.shift(); chunk.push(0); } else { chunk.pop(); chunk.unshift(0); } d[y].splice(startX, fw, ...chunk); }
+    } else if (dir === 'U') {
+        for (let y = 0; y < fh - 1; y++) { let lower = d[y+1].slice(startX, startX + fw); d[y].splice(startX, fw, ...lower); }
+        d[fh - 1].splice(startX, fw, ...new Array(fw).fill(0));
+    } else if (dir === 'D') {
+        for (let y = fh - 1; y > 0; y--) { let upper = d[y-1].slice(startX, startX + fw); d[y].splice(startX, fw, ...upper); }
+        d[0].splice(startX, fw, ...new Array(fw).fill(0));
+    }
+    restoreData(d);
+}
+
+function shiftAllDirect(dir) {
+    saveState();
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf;
+    let d = getFullData();
+    if (dir === 'L' || dir === 'R') {
+        for (let y = 0; y < fh; y++) { if (dir === 'L') { d[y].shift(); d[y].push(0); } else { d[y].pop(); d[y].unshift(0); } }
+    } else if (dir === 'U') {
+        for (let y = 0; y < fh - 1; y++) { d[y] = [...d[y+1]]; } d[fh - 1] = new Array(totalW).fill(0);
+    } else if (dir === 'D') {
+        for (let y = fh - 1; y > 0; y--) { d[y] = [...d[y-1]]; } d[0] = new Array(totalW).fill(0);
+    }
+    restoreData(d);
+}
+
+function packByte(p) {
+    let b=0; if(mode==1){ if(p[0]&1)b|=128;if(p[0]&2)b|=8;if(p[1]&1)b|=64;if(p[1]&2)b|=4;if(p[2]&1)b|=32;if(p[2]&2)b|=2;if(p[3]&1)b|=16;if(p[3]&2)b|=1; }
+    else if(mode==0){ if(p[0]&1)b|=128;if(p[0]&2)b|=8;if(p[0]&4)b|=32;if(p[0]&8)b|=2;if(p[1]&1)b|=64;if(p[1]&2)b|=4;if(p[1]&4)b|=16;if(p[1]&8)b|=1; }
+    else { for(let i=0;i<8;i++)if(p[i]&1)b|=(1<<(7-i)); } return b;
+}
+
+function showImportMenu() {
+    document.getElementById('import-area').value = '';
+    document.getElementById('import-overlay').style.display = 'flex';
+}
+
+function closeImport() {
+    document.getElementById('import-overlay').style.display = 'none';
+}
+
+function processImport() {
+    const text = document.getElementById('import-area').value;
+    const lines = text.split('\n');
+    let framesFound = [];
+    let currentFrame = null;
+
+    lines.forEach(line => {
+        let originalLine = line.trim();
+        let clean = line.split("'")[0].split(";")[0].split("REM")[0].trim();
+        if (!clean) return;
+
+        if (clean.toUpperCase().startsWith("DATA") || clean.toUpperCase().startsWith("DB")) {
+            if (!currentFrame) currentFrame = { data: [], label: 'IMPORTED' };
+            
+            let values = clean.replace(/DATA|DB/i, '').split(',')
+                .map(v => v.trim()).filter(v => v !== '')
+                .map(v => {
+                    if (v.startsWith('&')) return parseInt(v.substring(1), 16);
+                    if (v.toLowerCase().startsWith('0x')) return parseInt(v, 16);
+                    return parseInt(v, 10);
+                });
+
+            let comment = originalLine.toLowerCase();
+            if (values.length === 1) {
+                if (comment.includes("ancho") || comment.includes("width") || comment.includes("wide")) {
+                    currentFrame.wBytes = values[0];
+                    return;
+                }
+                if (comment.includes("alto") || comment.includes("height")) {
+                    currentFrame.h = values[0];
+                    return;
+                }
+            }
+
+            if (clean.toUpperCase().startsWith("DATA") && values.length === 1 && values[0] > 255) {
+                currentFrame.h = (values[0] >> 8) & 0xFF;
+                currentFrame.wBytes = values[0] & 0xFF;
+            } else {
+                currentFrame.data.push(...values);
+            }
+        } 
+        else {
+            if (clean.includes("---")) return;
+            if (currentFrame && currentFrame.data.length > 0) {
+                framesFound.push(currentFrame);
+            }
+            currentFrame = { data: [], label: clean.replace(':', ''), h: 0, wBytes: 0 };
+        }
+    });
+
+    if (currentFrame && currentFrame.data.length > 0) framesFound.push(currentFrame);
+    if (framesFound.length === 0) { alert("No se detectaron datos válidos."); return; }
+
+    saveState();
+    closeAnim();
+
+    framesFound.forEach((frame, idx) => {
+        if (frame.wBytes === 0 && frame.h === 0 && frame.data.length >= 2) {
+            frame.wBytes = frame.data.shift();
+            frame.h = frame.data.shift();
+        }
+        
+        let expectedSize = frame.wBytes * frame.h;
+        if (frame.data.length !== expectedSize) {
+            alert(`AVISO en Frame "${frame.label}" (Index ${idx+1}):\nEl tamaño declarado es ${frame.wBytes}x${frame.h} (${expectedSize} bytes), pero se han leído ${frame.data.length} bytes.`);
+        }
+    });
+
+    const first = framesFound[0];
+    const ppb = (mode == 0 ? 2 : (mode == 1 ? 4 : 8));
+    const newFw = first.wBytes * ppb;
+    const newFh = first.h;
+    const newNf = framesFound.length;
+
+    document.getElementById('nf').value = newNf;
+    document.getElementById('fw').value = newFw;
+    document.getElementById('fh').value = newFh;
+    
+    initGrid(false);
+    const pixels = document.querySelectorAll('.pixel');
+    const totalW = newFw * newNf;
+    const colors = getColors();
+    const isWords = text.includes('&') && first.data.some(v => v > 255);
+
+    framesFound.forEach((frame, fIdx) => {
+        let byteIdx = 0;
+        let frameXOffset = fIdx * newFw;
+        for (let y = 0; y < newFh; y++) {
+            for (let x = 0; x < newFw; x += ppb) {
+                let val;
+                if (isWords) {
+                    let wordValue = frame.data[Math.floor(byteIdx / 2)];
+                    val = (byteIdx % 2 === 0) ? (wordValue & 0xFF) : ((wordValue >> 8) & 0xFF);
+                } else {
+                    val = frame.data[byteIdx];
+                }
+                if (val !== undefined) {
+                    let pens = unpackByte(val);
+                    for (let p = 0; p < ppb; p++) {
+                        let targetX = frameXOffset + x + p;
+                        let pIdx = (y * totalW) + targetX;
+                        if (pixels[pIdx]) {
+                            pixels[pIdx].dataset.pen = pens[p];
+                            pixels[pIdx].style.background = colors[pens[p]];
+                        }
+                    }
+                }
+                byteIdx++;
+            }
+        }
+    });
+
+    closeImport();
+    updateByteInfo();
+}
+
+function unpackByte(b) {
+    let p = new Array(8).fill(0);
+    if (mode == 1) {
+        if (b & 128) p[0] |= 1; if (b & 8) p[0] |= 2;
+        if (b & 64)  p[1] |= 1; if (b & 4) p[1] |= 2;
+        if (b & 32)  p[2] |= 1; if (b & 2) p[2] |= 2;
+        if (b & 16)  p[3] |= 1; if (b & 1) p[3] |= 2;
+    } else if (mode == 0) {
+        if (b & 128) p[0] |= 1; if (b & 8) p[0] |= 2; if (b & 32) p[0] |= 4; if (b & 2) p[0] |= 8;
+        if (b & 64)  p[1] |= 1; if (b & 4) p[1] |= 2; if (b & 16) p[1] |= 4; if (b & 1) p[1] |= 8;
+    } else {
+        for (let i = 0; i < 8; i++) if (b & (1 << (7 - i))) p[i] = 1;
+    }
+    return p;
+}
+
+function doExport8BP() {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf;
+    const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen)), ppb = mode==0?2:mode==1?4:8;
+    let res = "; 8BP ASM EXPORT\n";
+    for(let f=0; f<nf; f++){ res += `\n.frame${f+1}\n`; for(let y=0; y<fh; y++){ let rb = []; for(let x=0; x<fw; x+=ppb) { let c = []; for(let p=0; p<ppb; p++) c.push(px[y*totalW + (f*fw) + x + p] || 0); rb.push(packByte(c)); } res += `  DB ${rb.map(b=>"&"+b.toString(16).toUpperCase().padStart(2,'0')).join(",")} ; Row ${y}\n`; } }
+    window.open().document.write("<pre>"+res+"</pre>"); closeExport();
+}
+
+function doExportABASC() {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf;
+    const ppb = (mode == 0 ? 2 : (mode == 1 ? 4 : 8)), bytesPerRow = Math.ceil(fw / ppb); 
+    let res = "' ABASC DATA EXPORT (REAL VRAM WIDTH)\n";
+    const px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
+    for (let f = 0; f < nf; f++) {
+        res += `\nLABEL FRAME${f + 1}:\n`;
+        let hexH = fh.toString(16).toUpperCase().padStart(2, '0');
+        let hexW = bytesPerRow.toString(16).toUpperCase().padStart(2, '0');
+        res += `    DATA &${hexH}${hexW}  ' H=${fh}, W=${bytesPerRow} bytes\n`;
+        for (let y = 0; y < fh; y++) {
+            let rowBytes = [];
+            for (let x = 0; x < fw; x += ppb) {
+                let pens = []; for (let p = 0; p < ppb; p++) pens.push(px[y * totalW + (f * fw) + x + p] || 0);
+                rowBytes.push(packByte(pens));
+            }
+            let words = [];
+            for (let i = 0; i < rowBytes.length; i += 2) {
+                let b1 = rowBytes[i], b2 = (i + 1 < rowBytes.length) ? rowBytes[i + 1] : 0;
+                let wordHex = b2.toString(16).toUpperCase().padStart(2, '0') + b1.toString(16).toUpperCase().padStart(2, '0');
+                words.push("&" + wordHex);
+            }
+            res += `    DATA ${words.join(", ")}\n`;
+        }
+    }
+    window.open().document.write("<pre>" + res + "</pre>"); closeExport();
+}
+
+function getBin(animate = false) {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode == 0 ? 2 : mode == 1 ? 4 : 8;
+    const buf = new Uint8Array(16384); const px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
+    let offset = 0, wBytes = Math.ceil(fw / ppb), tBytes = Math.ceil(totalW / ppb);
+    if (animate) {
+        for (let f = 0; f < nf; f++) {
+            for (let y = 0; y < fh; y++) {
+                for (let b = 0; b < wBytes; b++) {
+                    let pens = []; for (let p = 0; p < ppb; p++) { let pixelX = (f * fw) + (b * ppb) + p; pens.push(px[y * totalW + pixelX] || 0); }
+                    if (offset < 16384) buf[offset++] = packByte(pens);
+                }
+            }
+        }
+    } else {
+        for (let y = 0; y < Math.min(fh, 200); y++) {
+            let addr = (Math.floor(y / 8) * 80) + ((y % 8) * 2048);
+            for (let b = 0; b < Math.min(tBytes, 80); b++) {
+                let pens = []; for (let p = 0; p < ppb; p++) pens.push(px[y * totalW + (b * ppb) + p] || 0);
+                if (addr + b < 16384) buf[addr + b] = packByte(pens);
+            }
+        }
+    }
+    return buf;
+}
+
+function exportBinary() { let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([getBin(false)])); a.download = "screen.bin"; a.click(); closeExport(); }
+function exportDSK() { closeExport(); document.getElementById('dsk-export-overlay').style.display = 'flex'; }
+function closeDSKMenu() { document.getElementById('dsk-export-overlay').style.display = 'none'; }
+function doExportDSK(animate) { 
+    const nf = parseInt(document.getElementById('nf').value), fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value); 
+    const buf = generateCPCDisk(getBin(animate), mode, animate, fw, fh, nf, animSpeed); 
+    let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf])); a.download = "juego.dsk"; a.click(); closeDSKMenu(); 
+}
+
+function showExportMenu(){ document.getElementById('export-overlay').style['display']='flex'; }
+function closeExport(){ document.getElementById('export-overlay').style['display']='none'; }
+function confirmNewProject() { document.getElementById('new-project-overlay').style.display = 'none'; saveState(); previousNfValue = document.getElementById('nf').value; initGrid(false); }
+function cancelNewProject() { document.getElementById('new-project-overlay').style.display = 'none'; document.getElementById('nf').value = previousNfValue; }
+
+const vp = document.getElementById('viewport'), pn = document.getElementById('canvas-panner');
+vp.onwheel = (e) => { e.preventDefault(); scale = Math.min(Math.max(0.05, scale * (e.deltaY > 0 ? 0.9 : 1.1)), 20); pn.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; };
+vp.onmousedown = (e) => { if(e.button === 1) { isPanning = true; vp.style.cursor = 'grabbing'; e.preventDefault(); } };
+const animWin = document.getElementById('anim-window'), handle = document.getElementById('win-handle');
+handle.onmousedown = (e) => { isAnimDragging = true; animOffset = [animWin.offsetLeft - e.clientX, animWin.offsetTop - e.clientY]; e.preventDefault(); };
+window.onmousemove = (e) => { if(isPanning) { posX += e.movementX; posY += e.movementY; pn.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; } if(isAnimDragging) { animWin.style.left = (e.clientX + animOffset[0]) + 'px'; animWin.style.top = (e.clientY + animOffset[1]) + 'px'; } };
+window.onmouseup = () => { if(drawing && currentTool!=='pen'){ if (currentTool !== 'select') { previewPixels.forEach(p => { paint(p); p.classList.remove('preview'); p.classList.remove('select-preview'); }); previewPixels=[]; } else pasteSelection(); } drawing = false; isPanning = false; isAnimDragging = false; vp.style.cursor = 'default'; };
+
+animWin.onwheel = (e) => { e.preventDefault(); animZoom += e.deltaY > 0 ? -1 : 1; animZoom = Math.max(2, Math.min(animZoom, 40)); let cv = document.getElementById('canvas'), aspect = (mode == 0) ? 2 : 1; cv.style.width = (parseInt(document.getElementById('fw').value) * animZoom * aspect) + "px"; cv.style.height = (parseInt(document.getElementById('fh').value) * animZoom) + "px"; };
+
+function playAnim() {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    const cv = document.getElementById('canvas'), ctx = cv.getContext('2d'), aspect = (mode == 0) ? 2 : 1;
+    cv.width = fw; cv.height = fh; cv.style.width = (fw * animZoom * aspect) + "px"; cv.style.height = (fh * animZoom) + "px";
+    animWin.style.display = 'block'; let f = 0; if(animTimer) clearInterval(animTimer);
+    animTimer = setInterval(() => { const px = document.querySelectorAll('.pixel'); ctx.clearRect(0,0,fw,fh); for(let y=0; y<fh; y++) { for(let x=0; x<fw; x++) { const p = px[y * (fw*nf) + (f*fw + x)]; if(p){ ctx.fillStyle = p.style.background; ctx.fillRect(x,y,1,1); } } } f = (f+1)%nf; document.getElementById('anim-status').innerText = `Frame: ${f==0?nf:f}/${nf} | ${animSpeed}ms`; }, animSpeed);
+}
+function closeAnim() { if(animTimer) clearInterval(animTimer); animWin.style.display = 'none'; }
+
+window.onkeydown = (e) => { 
+    const keyPress = e.key.toLowerCase(); 
+    if ((e.ctrlKey || e.metaKey) && keyPress === 'z') { e.preventDefault(); undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && keyPress === 'c') { e.preventDefault(); copySelection(); return; }
+    if ((e.ctrlKey || e.metaKey) && keyPress === 'v') { if(clipboardData && currentTool === 'select') { e.preventDefault(); pasteSelection(); return; } }
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(keyPress)) {
+        if (isShiftMode) {
+            e.preventDefault(); if (currentHoveredFrame > 0) { let dir = 'L'; if (keyPress === 'arrowright') dir = 'R'; if (keyPress === 'arrowup') dir = 'U'; if (keyPress === 'arrowdown') dir = 'D'; shiftFrameDirect(currentHoveredFrame - 1, dir); }
+            return; 
+        } else if (document.getElementById('full-shift-cb').checked) {
+            e.preventDefault(); let dir = 'L'; if (keyPress === 'arrowright') dir = 'R'; if (keyPress === 'arrowup') dir = 'U'; if (keyPress === 'arrowdown') dir = 'D'; shiftAllDirect(dir); return;
+        }
+    }
+    if (keyPress === 'h' || keyPress === 'v') { if (currentHoveredFrame > 0 && Date.now() - lastMirrorTime >= 1000) { if (keyPress === 'h') flipHDirect(currentHoveredFrame - 1); else flipVDirect(currentHoveredFrame - 1); lastMirrorTime = Date.now(); } }
+    if (keyPress === 't') { if (currentHoveredFrame > 0 && Date.now() - lastRotateTime >= 1000) { rotateDirect(currentHoveredFrame - 1); lastRotateTime = Date.now(); } }
+    if(keyPress === 'p') setTool('pen'); if(keyPress === '/') setTool('line'); if(keyPress === 'r') setTool('box'); if(keyPress === 'c') setTool('circle'); if(keyPress === 's') setTool('select'); if(keyPress === 'g') setTool('fill'); if(keyPress === 'escape') closeAnim(); 
+    if(animWin.style.display === 'block') { if(keyPress === '+' || keyPress === '=') { animSpeed = Math.max(50, animSpeed - 50); playAnim(); } if(keyPress === '-' || keyPress === '_') { animSpeed = Math.min(2000, animSpeed + 50); playAnim(); } } 
+};
+
+function saveProject() { const name = "sprite.json"; const d = { config: { fw: parseInt(document.getElementById('fw').value), fh: parseInt(document.getElementById('fh').value), nf: parseInt(document.getElementById('nf').value), mode, fModes }, pixels: Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen)) }; let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], {type: 'application/json'})); a.download = name; a.click(); updateFileStatus(name); }
+function triggerLoad() { const input = document.getElementById('load-input'); input.value = null; input.click(); }
+function loadProject(input) { 
+    if (!input.files[0]) return; const file = input.files[0];
+    if (!confirm(`¿Cargar "${file.name}"?`)) { input.value = ''; return; }
+    saveState();
+    closeAnim();
+    const r = new FileReader(); r.onload = (e) => { 
+        try {
+            const d = JSON.parse(e.target.result); 
+            document.getElementById('fw').value = d.config.fw; 
+            document.getElementById('fh').value = d.config.fh; 
+            document.getElementById('nf').value = d.config.nf; 
+            document.getElementById('mode').value = d.config.mode; 
+            if(d.config.fModes) fModes = d.config.fModes;
+            initGrid(false); 
+            const px = document.querySelectorAll('.pixel'), colors = getColors(); 
+            d.pixels.forEach((v, i) => { if(px[i]) { px[i].dataset.pen = v; px[i].style.background = colors[v]; } }); 
+            updateFileStatus(file.name); 
+            updateByteInfo(); 
+            input.value = ''; 
+        } catch (err) { alert("Error."); }
+    }; r.readAsText(file); 
+}
+
+document.addEventListener("DOMContentLoaded", () => { 
+    initGrid(); document.querySelectorAll('.toolbar input:not(#full-shift-cb, #hide-grid-cb, #transparent-bg-cb)').forEach(i => {
+        if (i.id === 'nf') { i.onfocus = () => { previousNfValue = i.value; }; i.onchange = () => { document.getElementById('new-project-msg').innerText = `Cambio a ${i.value} frames.`; document.getElementById('new-project-overlay').style.display = 'flex'; };
+        } else { i.onchange = () => initGrid(true); }
+    }); 
+});
+</script>
+</body>
+</html>

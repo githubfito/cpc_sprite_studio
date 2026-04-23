@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Amstrad 6128 DSK con Archivo (Fijado)</title>
+    <style>
+        body { font-family: monospace; background: #2b2b2b; color: #ffcc00; text-align: center; padding: 40px; }
+        .box { border: 2px solid #ffcc00; padding: 20px; background: #1a1a1a; display: inline-block; }
+        textarea { width: 100%; height: 100px; background: #000; color: #0f0; border: 1px solid #555; padding: 10px; font-family: monospace; margin-top: 10px; }
+        button { background: #ffcc00; color: #000; padding: 10px 20px; font-weight: bold; cursor: pointer; border: none; font-size: 16px; margin-top: 20px; }
+        button:hover { background: #e6b800; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>GENERADOR DSK + HOLA.BAS</h2>
+    <p>Modifica el código BASIC si quieres:</p>
+    <textarea id="codigoBasic">10 PRINT "¡AHORA SI CARGA TODO!"
+20 PRINT "INCLUSO LA ULTIMA LINEA"
+30 GOTO 10</textarea>
+    <br>
+    <button onclick="generar()">DESCARGAR DSK LISTO</button>
+</div>
+
+<script>
+function generar() {
+    const TRACKS = 40;
+    const SECTORS = 9;
+    const SECTOR_SIZE = 512;
+    const TRACK_DATA_SIZE = 256 + (SECTORS * SECTOR_SIZE); 
+    const TOTAL_SIZE = 256 + (TRACKS * TRACK_DATA_SIZE); 
+
+    const buffer = new Uint8Array(TOTAL_SIZE);
+    buffer.fill(0); 
+
+    // 1. CABECERA DSK ESTÁNDAR
+    const sig = "MV - CPCEMU Disk-File\r\nDisk-Info\r\n";
+    for (let i = 0; i < sig.length; i++) buffer[i] = sig.charCodeAt(i);
+    
+    const creator = "Generador     ";
+    for (let i = 0; i < creator.length; i++) buffer[0x22 + i] = creator.charCodeAt(i);
+
+    buffer[0x30] = TRACKS;       
+    buffer[0x31] = 1;            
+    buffer[0x32] = 0x00;         
+    buffer[0x33] = 0x13;         
+
+    // 2. GENERACIÓN DE PISTAS
+    for (let t = 0; t < TRACKS; t++) {
+        let offset = 256 + (t * TRACK_DATA_SIZE);
+        
+        const trkSig = "Track-Info\r\n";
+        for (let i = 0; i < trkSig.length; i++) buffer[offset + i] = trkSig.charCodeAt(i);
+        
+        buffer[offset + 0x10] = t;        
+        buffer[offset + 0x11] = 0;        
+        buffer[offset + 0x14] = 2;        
+        buffer[offset + 0x15] = SECTORS;  
+        buffer[offset + 0x16] = 0x4E;     
+        buffer[offset + 0x17] = 0xE5;     
+
+        for (let s = 0; s < SECTORS; s++) {
+            let sOff = offset + 0x18 + (s * 8);
+            buffer[sOff + 0] = t;         
+            buffer[sOff + 1] = 0;         
+            buffer[sOff + 2] = 0xC1 + s;  
+            buffer[sOff + 3] = 2;         
+            buffer[sOff + 4] = 0;         
+            buffer[sOff + 5] = 0;         
+            buffer[sOff + 6] = 0x00;      
+            buffer[sOff + 7] = 0x02;      
+        }
+        
+        let dataOff = offset + 256;
+        for (let d = 0; d < (SECTORS * SECTOR_SIZE); d++) {
+            buffer[dataOff + d] = 0xE5;
+        }
+    }
+
+    // --- 3. PREPARACIÓN DEL ARCHIVO CON REVISIÓN DE SALTO DE LÍNEA ---
+    let basicCode = document.getElementById("codigoBasic").value;
+    
+    // Normalizar todos los saltos de línea al estándar del CPC (CR+LF)
+    basicCode = basicCode.replace(/\r?\n/g, "\r\n");
+    
+    // Revisar y forzar el último salto de línea si el usuario no lo ha incluido
+    if (!basicCode.endsWith("\r\n")) {
+        basicCode += "\r\n";
+    }
+    
+    // Añadir el carácter de fin de archivo CP/M
+    basicCode += "\x1A"; 
+
+    let numRecords = Math.ceil(basicCode.length / 128);
+    let numBlocks = Math.ceil(numRecords / 8); 
+
+    // 4. DIRECTORIO
+    let dirOffset = 256 + 256;
+    
+    // Limpiar la entrada del directorio
+    for (let i = 0; i < 32; i++) {
+        buffer[dirOffset + i] = 0x00;
+    }
+
+    buffer[dirOffset + 0] = 0; 
+    const filename = "HOLA    BAS"; 
+    for (let i = 0; i < 11; i++) buffer[dirOffset + 1 + i] = filename.charCodeAt(i);
+    buffer[dirOffset + 12] = 0; 
+    buffer[dirOffset + 15] = numRecords; 
+    
+    for (let b = 0; b < numBlocks; b++) {
+        buffer[dirOffset + 16 + b] = 2 + b; 
+    }
+
+    // 5. DATOS DEL ARCHIVO
+    let dataOffset = 256 + 256 + (4 * 512);
+    for (let i = 0; i < basicCode.length; i++) {
+        buffer[dataOffset + i] = basicCode.charCodeAt(i);
+    }
+
+    // 6. DESCARGA
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'juego_corregido.dsk';
+    a.click();
+}
+</script>
+</body>
+</html>

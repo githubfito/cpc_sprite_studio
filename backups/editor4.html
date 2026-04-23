@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>CPC Sprite Studio - 8BP Row-Aligned</title>
+    <style>
+        :root { --cpc-cyan: #00adef; --cpc-dark: #111; --sidebar-w: 60px; }
+        body { font-family: 'Courier New', monospace; background: var(--cpc-dark); color: #eee; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background: #000; width: 100%; padding: 10px 0; border-bottom: 2px solid var(--cpc-cyan); text-align: center; flex-shrink: 0; }
+        
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: var(--sidebar-w); background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding: 15px 0; gap: 15px; flex-shrink: 0; overflow-y: auto; }
+        
+        .side-btn { width: 44px; height: 44px; background: #333; border: 1px solid #555; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: 0.2s; position: relative; flex-shrink: 0; }
+        .side-btn:hover { background: var(--cpc-cyan); color: #000; border-color: #fff; }
+        .side-btn::after { content: attr(title); position: absolute; left: 55px; background: #000; color: #fff; padding: 5px; font-size: 10px; white-space: nowrap; display: none; z-index: 100; border: 1px solid var(--cpc-cyan); }
+        .side-btn:hover::after { display: block; }
+        
+        .workspace { flex: 1; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: #222; padding: 10px 20px; border-bottom: 1px solid #444; justify-content: center; align-items: center; width: 100%; box-sizing: border-box; }
+        .group { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border-right: 1px solid #444; padding-right: 12px; }
+        .group:last-child { border: none; }
+        
+        .label-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        #byte-info { font-size: 9px; color: var(--cpc-cyan); font-style: italic; }
+        input, select { background: #000; color: #fff; border: 1px solid #555; padding: 2px; font-family: monospace; }
+
+        #canvas-wrapper { background: #333; padding: 40px; flex: 1; width: 100%; overflow: auto; display: flex; justify-content: center; align-items: flex-start; box-sizing: border-box; }
+        .grid { display: grid; background: #000; position: relative; border: 2px solid #555; width: fit-content; transform-origin: top center; transition: transform 0.1s ease-out; }
+        .pixel { border: 1px solid rgba(255,255,255,0.05); box-sizing: border-box; }
+        .f-guide { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255, 165, 0, 0.8); pointer-events: none; z-index: 10; }
+
+        .m0 .pixel { width: 24px; height: 12px; }
+        .m1 .pixel { width: 12px; height: 12px; }
+        .m2 .pixel { width: 6px; height: 12px; }
+
+        .pal { display: flex; gap: 4px; padding: 10px; background: #000; border-top: 1px solid #444; width: 100%; justify-content: center; }
+        .c-box { width: 25px; height: 25px; border: 2px solid #444; cursor: pointer; }
+        .c-box.sel { border-color: #fff; outline: 2px solid var(--cpc-cyan); }
+
+        #anim-window { display: none; position: fixed; top: 150px; left: 100px; background: #000; border: 3px solid var(--cpc-cyan); z-index: 2000; box-shadow: 0 0 30px #000; }
+        .win-header { background: var(--cpc-cyan); color: #000; padding: 5px 10px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none; }
+        .win-body { padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        #canvas { image-rendering: pixelated; background: #000; }
+        
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; }
+        .modal { background: #222; padding: 30px; border: 2px solid var(--cpc-cyan); display: flex; flex-direction: column; gap: 15px; width: 400px; text-align: center; }
+        .modal button { background: #333; border: 1px solid #555; padding: 10px; color: white; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<header><h1>CPC SPRITE STUDIO</h1></header>
+
+<div class="main-container">
+    <aside class="sidebar">
+        <button class="side-btn" onclick="openFrameModal()" title="Añadir nuevo Frame"><i>+F</i></button>
+        <button class="side-btn" onclick="openDelFrameModal()" title="Eliminar Frame físico"><i>-F</i></button>
+        <button class="side-btn" onclick="clearFrame()" title="Limpiar contenido Frame"><i>F✂</i></button>
+        <button class="side-btn" onclick="cloneFrame()" title="Clonar Frame"><i>C⎘</i></button>
+        <button class="side-btn" onclick="flipH()" title="Espejo Horizontal"><i>↔</i></button>
+        <button class="side-btn" onclick="flipV()" title="Espejo Vertical"><i>↕</i></button>
+        <button class="side-btn" onclick="rotate90()" title="Girar 90º"><i>⟳</i></button>
+        <button class="side-btn" onclick="initGrid(true)" title="Limpiar todo"><i>♻</i></button>
+    </aside>
+
+    <div class="workspace">
+        <div class="toolbar">
+            <div class="group">
+                <div class="label-row">DIM: <input type="number" id="fw" value="16" class="auto-gen" style="width:40px">x<input type="number" id="fh" value="16" class="auto-gen" style="width:40px"></div>
+            </div>
+            <div class="group">
+                <div class="label-row">FRAMES: <input type="number" id="nf" value="4" class="auto-gen" style="width:35px"></div>
+            </div>
+            <div class="group">
+                <div class="label-row">MODO: 
+                    <select id="mode" class="auto-gen">
+                        <option value="0">0</option>
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
+                    </select>
+                </div>
+                <div id="byte-info">1 byte = 4 píxeles</div>
+            </div>
+            <div class="group">
+                <div class="label-row">ZOOM: 
+                    <select id="edit-zoom" onchange="applyEditZoom()">
+                        <option value="0.5">50%</option>
+                        <option value="1" selected>100%</option>
+                        <option value="1.5">150%</option>
+                        <option value="2">200%</option>
+                        <option value="3">300%</option>
+                        <option value="4">400%</option>
+                    </select>
+                </div>
+            </div>
+            <button class="play" onclick="initGrid(true)">GENERAR</button>
+            <button onclick="playAnim()">ANIMAR</button>
+            <button onclick="showExportMenu()" style="background:#27ae60">DATA</button>
+        </div>
+
+        <div id="canvas-wrapper"><div id="grid" class="grid"></div></div>
+        <div id="pal" class="pal"></div>
+    </div>
+</div>
+
+<div id="anim-window">
+    <div id="win-handle" class="win-header"><span>ANIMACIÓN</span><button onclick="closeAnim()" style="background:#f00; border:none; padding:2px 8px; color:#fff; cursor:pointer;">X</button></div>
+    <div class="win-body"><canvas id="canvas"></canvas></div>
+    <div id="anim-status" style="text-align:center; padding:5px; font-size:11px; color:#fff;"></div>
+    <div style="background:#222; padding:5px; font-size:10px; text-align:center; color:var(--cpc-cyan);">[+] [-] Vel | [0-9] Zoom | [ESC] Cerrar</div>
+</div>
+
+<div id="frame-modal" class="overlay">
+    <div class="modal">
+        <h2>AÑADIR FRAME</h2>
+        <button onclick="addFrame('end')">AL FINAL (To End)</button>
+        <button onclick="addFrame('start')">AL INICIO (At Start)</button>
+        <button onclick="addFrame('custom')">POSICIÓN PERSONALIZADA</button>
+        <button onclick="closeFrameModal()" style="background:#500; margin-top:10px;">CANCELAR</button>
+    </div>
+</div>
+
+<div id="del-frame-modal" class="overlay">
+    <div class="modal">
+        <h2 style="color:#f66;">ELIMINAR FRAME</h2>
+        <button onclick="removeFrame('end')">EL ÚLTIMO (Last)</button>
+        <button onclick="removeFrame('start')">EL PRIMERO (First)</button>
+        <button onclick="removeFrame('custom')">POSICIÓN ESPECÍFICA</button>
+        <button onclick="closeDelFrameModal()" style="background:#444; margin-top:10px;">CANCELAR</button>
+    </div>
+</div>
+
+<div id="export-overlay" class="overlay">
+    <div class="export-menu modal">
+        <h2>EXPORTAR</h2>
+        <div style="background:#333; padding:10px; margin-bottom:10px; font-size:12px;">
+            Formato numérico: <label><input type="radio" name="num-format" value="hex" checked> Hex</label> <label><input type="radio" name="num-format" value="dec"> Dec</label>
+        </div>
+        <button onclick="doExport(1)">1) DATA NORMALES (BASIC)</button>
+        <button onclick="doExport(2)">2) FORMATO ASM POR FILAS (8BP)</button>
+        <button onclick="doExport(3)">3) VOLCADO SCR / BIN</button>
+        <button onclick="closeExport()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
+    </div>
+</div>
+
+<script>
+const cpcPal = ["#000000","#000080","#0000FF","#800000","#800080","#8000FF","#FF0000","#FF0080","#FF00FF","#008000","#008080","#0080FF","#808000","#808080","#8080FF","#FF8000","#FF8080","#FF80FF","#00FF00","#00FF80","#00FFFF","#80FF00","#80FF80","#80FFFF","#FFFF00","#FFFF80","#FFFFFF"];
+let mode = 1, pen = 0, drawing = false, timer = null, animSpeed = 800, animZoom = 4, globalEditZoom = 1;
+
+function getModeColors() {
+    if (mode == 1) return ["#000080", "#FFFF00", "#0000FF", "#FF0000"];
+    if (mode == 2) return ["#000080", "#FFFF00"];
+    return ["#000080","#FFFF00","#00FFFF","#FF00FF","#000000","#000080","#0000FF","#800000","#800080","#8000FF","#FF0000","#FF0080","#FF00FF","#008000","#008080","#0080FF"];
+}
+
+function applyEditZoom() {
+    globalEditZoom = parseFloat(document.getElementById('edit-zoom').value);
+    document.getElementById('grid').style.transform = `scale(${globalEditZoom})`;
+}
+
+function initGrid(confirmNeeded = false) {
+    if (confirmNeeded) {
+        let modified = Array.from(document.querySelectorAll('.pixel')).some(p => parseInt(p.dataset.pen) !== 0);
+        if (modified && !confirm("¿Borrar todo el lienzo?")) return;
+    }
+    mode = parseInt(document.getElementById('mode').value);
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    const totalW = fw * nf, g = document.getElementById('grid'), colors = getModeColors();
+    pen = 0; buildPal();
+    g.innerHTML = ''; g.className = `grid m${mode}`;
+    g.style.gridTemplateColumns = `repeat(${totalW}, auto)`;
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < totalW * fh; i++) {
+        const p = document.createElement('div');
+        p.className = 'pixel'; p.style.background = colors[0]; p.dataset.pen = 0;
+        p.onmousedown = (e) => { e.preventDefault(); drawing = true; paint(p); };
+        p.onmouseenter = () => { if(drawing) paint(p); };
+        frag.appendChild(p);
+    }
+    g.appendChild(frag);
+    for (let i = 1; i < nf; i++) {
+        const guide = document.createElement('div');
+        guide.className = 'f-guide'; guide.style.left = (i * fw * (mode==0?24:mode==1?12:6)) + "px";
+        g.appendChild(guide);
+    }
+    applyEditZoom();
+}
+
+function getFullSpriteData() {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    const totalW = fw * nf, pixels = document.querySelectorAll('.pixel');
+    let allFrames = [];
+    for (let f = 0; f < nf; f++) {
+        let frame = [];
+        for (let y = 0; y < fh; y++) {
+            let row = [];
+            for (let x = 0; x < fw; x++) row.push(parseInt(pixels[(y * totalW) + (f * fw) + x].dataset.pen));
+            frame.push(row);
+        }
+        allFrames.push(frame);
+    }
+    return allFrames;
+}
+
+function restoreData(allData) {
+    document.getElementById('nf').value = allData.length;
+    initGrid(false);
+    const fw = parseInt(document.getElementById('fw').value), totalW = fw * allData.length;
+    const pixels = document.querySelectorAll('.pixel'), colors = getModeColors();
+    allData.forEach((frame, fIdx) => {
+        frame.forEach((row, y) => {
+            row.forEach((penVal, x) => {
+                const p = pixels[(y * totalW) + (fIdx * fw) + x];
+                p.dataset.pen = penVal; p.style.background = colors[penVal];
+            });
+        });
+    });
+}
+
+function openFrameModal() { document.getElementById('frame-modal').style.display = 'flex'; }
+function closeFrameModal() { document.getElementById('frame-modal').style.display = 'none'; }
+function openDelFrameModal() { document.getElementById('del-frame-modal').style.display = 'flex'; }
+function closeDelFrameModal() { document.getElementById('del-frame-modal').style.display = 'none'; }
+
+function addFrame(pos) {
+    let allData = getFullSpriteData();
+    let newFrame = Array(parseInt(document.getElementById('fh').value)).fill().map(() => Array(parseInt(document.getElementById('fw').value)).fill(0));
+    if (pos === 'end') allData.push(newFrame);
+    else if (pos === 'start') allData.unshift(newFrame);
+    else if (pos === 'custom') {
+        let idx = prompt(`¿Posición? (1 a ${allData.length + 1})`);
+        if (!idx || isNaN(idx)) return;
+        allData.splice(Math.max(0, Math.min(allData.length, parseInt(idx) - 1)), 0, newFrame);
+    }
+    restoreData(allData); closeFrameModal();
+}
+
+function removeFrame(pos) {
+    let allData = getFullSpriteData();
+    if (allData.length <= 1) return;
+    if (pos === 'end') allData.pop();
+    else if (pos === 'start') allData.shift();
+    else if (pos === 'custom') {
+        let idx = prompt(`¿Qué frame eliminar? (1 a ${allData.length})`);
+        if (!idx || isNaN(idx)) return;
+        let target = parseInt(idx) - 1;
+        if (target >= 0 && target < allData.length) allData.splice(target, 1);
+        else return;
+    }
+    restoreData(allData); closeDelFrameModal();
+}
+
+function askFrame(msg="frame") {
+    const nf = parseInt(document.getElementById('nf').value);
+    const input = prompt(`¿Sobre qué ${msg}? (1 a ${nf})`);
+    if (!input || isNaN(input)) return -1;
+    const f = parseInt(input)-1; return (f>=0 && f<nf) ? f : -1;
+}
+
+function clearFrame() { 
+    const f = askFrame(); if (f===-1) return;
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), totalW = fw * parseInt(document.getElementById('nf').value);
+    const pixels = document.querySelectorAll('.pixel'), colors = getModeColors();
+    for(let y=0; y<fh; y++) for(let x=0; x<fw; x++) {
+        const p = pixels[(y * totalW) + (f * fw) + x];
+        p.dataset.pen = 0; p.style.background = colors[0];
+    }
+}
+
+function cloneFrame() {
+    const o = askFrame("origen"), d = askFrame("destino");
+    if (o===-1 || d===-1) return;
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), totalW = fw * parseInt(document.getElementById('nf').value);
+    const pixels = document.querySelectorAll('.pixel'), colors = getModeColors();
+    for(let y=0; y<fh; y++) for(let x=0; x<fw; x++) {
+        const penVal = pixels[(y * totalW) + (o * fw) + x].dataset.pen;
+        const p = pixels[(y * totalW) + (d * fw) + x];
+        p.dataset.pen = penVal; p.style.background = colors[penVal];
+    }
+}
+
+function flipH() {
+    const f = askFrame(); if (f===-1) return;
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), totalW = fw * parseInt(document.getElementById('nf').value);
+    const pixels = document.querySelectorAll('.pixel'), colors = getModeColors();
+    let data = [];
+    for(let y=0; y<fh; y++){
+        let row = [];
+        for(let x=0; x<fw; x++) row.push(pixels[(y * totalW) + (f * fw) + x].dataset.pen);
+        data.push(row.reverse());
+    }
+    data.forEach((row, y) => row.forEach((val, x) => {
+        const p = pixels[(y * totalW) + (f * fw) + x];
+        p.dataset.pen = val; p.style.background = colors[val];
+    }));
+}
+
+function flipV() {
+    const f = askFrame(); if (f===-1) return;
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), totalW = fw * parseInt(document.getElementById('nf').value);
+    const pixels = document.querySelectorAll('.pixel'), colors = getModeColors();
+    let data = [];
+    for(let y=0; y<fh; y++){
+        let row = [];
+        for(let x=0; x<fw; x++) row.push(pixels[(y * totalW) + (f * fw) + x].dataset.pen);
+        data.push(row);
+    }
+    data.reverse().forEach((row, y) => row.forEach((val, x) => {
+        const p = pixels[(y * totalW) + (f * fw) + x];
+        p.dataset.pen = val; p.style.background = colors[val];
+    }));
+}
+
+function rotate90() {
+    const f = askFrame(); if (f===-1) return;
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), totalW = fw * parseInt(document.getElementById('nf').value);
+    if (fw !== fh) { alert("Solo cuadrados"); return; }
+    const pixels = document.querySelectorAll('.pixel'), colors = getModeColors();
+    let old = [];
+    for(let y=0; y<fh; y++){
+        let row = [];
+        for(let x=0; x<fw; x++) row.push(pixels[(y * totalW) + (f * fw) + x].dataset.pen);
+        old.push(row);
+    }
+    for(let y=0; y<fh; y++) for(let x=0; x<fw; x++){
+        const val = old[fh - 1 - x][y];
+        const p = pixels[(y * totalW) + (f * fw) + x];
+        p.dataset.pen = val; p.style.background = colors[val];
+    }
+}
+
+function paint(el) { el.style.background = getModeColors()[pen]; el.dataset.pen = pen; }
+function playAnim() { document.getElementById('anim-window').style.display = 'block'; renderFrame(); }
+function closeAnim() { clearInterval(timer); document.getElementById('anim-window').style.display='none'; }
+
+function renderFrame() {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    const tw = fw * nf, canv = document.getElementById('canvas'), ctx = canv.getContext('2d'), pixels = document.querySelectorAll('.pixel');
+    canv.width = fw; canv.height = fh;
+    let r = mode == 0 ? 2 : (mode == 1 ? 1 : 0.5);
+    canv.style.width = (fw * r * animZoom * 2) + "px"; canv.style.height = (fh * animZoom * 2) + "px";
+    document.getElementById('anim-status').innerText = `Speed: ${animSpeed}ms | Zoom: x${animZoom}`;
+    let f = 0; if(timer) clearInterval(timer);
+    timer = setInterval(() => {
+        ctx.clearRect(0,0,fw,fh);
+        for(let y = 0; y < fh; y++) for(let x = 0; x < fw; x++) {
+            const idx = y * tw + (f * fw + x);
+            if(pixels[idx]){ ctx.fillStyle = pixels[idx].style.background; ctx.fillRect(x,y,1,1); }
+        }
+        f = (f + 1) % nf;
+    }, animSpeed);
+}
+
+const win = document.getElementById('anim-window'), handle = document.getElementById('win-handle');
+let isDragging = false, offset = [0,0];
+handle.onmousedown = (e) => { isDragging = true; offset = [win.offsetLeft - e.clientX, win.offsetTop - e.clientY]; };
+document.onmousemove = (e) => { if (isDragging) { win.style.left = (e.clientX + offset[0]) + 'px'; win.style.top = (e.clientY + offset[1]) + 'px'; win.style.transform = "none"; } };
+document.onmouseup = () => isDragging = false;
+
+window.onkeydown = (e) => {
+    if (document.getElementById('anim-window').style.display === 'block') {
+        if (e.key === 'Escape') closeAnim();
+        if (e.key === '+' || e.key === '=') { animSpeed = Math.max(10, animSpeed - 10); renderFrame(); }
+        if (e.key === '-' || e.key === '_') { animSpeed = Math.min(2000, animSpeed + 10); renderFrame(); }
+        if (e.key >= '0' && e.key <= '9') { animZoom = e.key === '0' ? 12 : parseInt(e.key); renderFrame(); }
+    } else {
+        if (e.key >= '0' && e.key <= '9') {
+            const zMap = {'1':1, '2':1.5, '3':2, '4':3, '5':4, '0':0.5};
+            if (zMap[e.key]) { document.getElementById('edit-zoom').value = zMap[e.key]; applyEditZoom(); }
+        }
+    }
+};
+
+function packCpcByte(pens) {
+    let b = 0;
+    if (mode == 1) { 
+        if (pens[0] & 1) b |= 128; if (pens[0] & 2) b |= 8;
+        if (pens[1] & 1) b |= 64;  if (pens[1] & 2) b |= 4;
+        if (pens[2] & 1) b |= 32;  if (pens[2] & 2) b |= 2;
+        if (pens[3] & 1) b |= 16;  if (pens[3] & 2) b |= 1;
+    } else if (mode == 0) { 
+        if (pens[0] & 1) b |= 128; if (pens[0] & 2) b |= 8; if (pens[0] & 4) b |= 32; if (pens[0] & 8) b |= 2;
+        if (pens[1] & 1) b |= 64;  if (pens[1] & 2) b |= 4; if (pens[1] & 4) b |= 16; if (pens[1] & 8) b |= 1;
+    } else { for(let i=0; i<8; i++) if(pens[i] & 1) b |= (1 << (7-i)); }
+    return b;
+}
+
+function doExport(type) {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf;
+    const data = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
+    const step = mode == 1 ? 4 : (mode == 0 ? 2 : 8), isHex = document.querySelector('input[name="num-format"]:checked').value === "hex";
+    const fmt = (n) => isHex ? "&" + n.toString(16).toUpperCase().padStart(2, '0') : n.toString();
+    
+    let res = "";
+    if(type === 1) {
+        const bytes = []; for(let i=0; i<data.length; i+=step) bytes.push(packCpcByte(data.slice(i, i+step)));
+        for(let i=0; i<bytes.length; i+=8) res += (100+i) + " DATA " + bytes.slice(i, i+8).map(fmt).join(",") + "\n";
+    } else if(type === 2) {
+        res = "; ASM EXPORT - ROW ALIGNED\n";
+        for (let f = 0; f < nf; f++) {
+            res += "\n.frame" + (f+1) + "\n";
+            for (let y = 0; y < fh; y++) {
+                let rowBytes = [];
+                let rowPixels = data.slice((y*totalW)+(f*fw), (y*totalW)+(f*fw)+fw);
+                for (let i = 0; i < rowPixels.length; i += step) {
+                    rowBytes.push(packCpcByte(rowPixels.slice(i, i + step)));
+                }
+                res += "  DB " + rowBytes.map(fmt).join(",") + " ; Row " + y + "\n";
+            }
+        }
+    } else {
+        const bytes = []; for(let i=0; i<data.length; i+=step) bytes.push(packCpcByte(data.slice(i, i+step)));
+        res = bytes.map(fmt).join(" ");
+    }
+    const w = window.open(); w.document.write("<pre>" + res + "</pre>");
+    closeExport();
+}
+
+function buildPal() {
+    const box = document.getElementById('pal'); box.innerHTML = '';
+    getModeColors().forEach((c, i) => {
+        let d = document.createElement('div');
+        d.className = 'c-box' + (i == pen ? ' sel' : '');
+        d.style.background = c;
+        d.onclick = () => { pen = i; buildPal(); };
+        box.appendChild(d);
+    });
+}
+function showExportMenu() { document.getElementById('export-overlay').style.display = 'flex'; }
+function closeExport() { document.getElementById('export-overlay').style.display = 'none'; }
+
+window.onmouseup = () => { drawing = false; isDragging = false; };
+document.addEventListener("DOMContentLoaded", () => {
+    initGrid(false);
+    document.querySelectorAll('.auto-gen').forEach(input => {
+        input.addEventListener('change', () => initGrid(true));
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+    });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CPC Sprite Studio - Ultimate Edition</title>
+    <style>
+        :root { --cpc-cyan: #00adef; --cpc-dark: #111; --sidebar-w: 65px; }
+        body { font-family: 'Courier New', monospace; background: var(--cpc-dark); color: #eee; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background: #000; width: 100%; padding: 10px 0; border-bottom: 2px solid var(--cpc-cyan); text-align: center; flex-shrink: 0; z-index: 100; }
+        
+        .main-container { display: flex; flex: 1; overflow: hidden; position: relative; }
+        .sidebar { width: var(--sidebar-w); background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding: 15px 0; gap: 12px; flex-shrink: 0; overflow-y: auto; z-index: 95; }
+        
+        .side-btn { width: 44px; height: 44px; background: #333; border: 1px solid #555; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: 0.2s; position: relative; }
+        .side-btn:hover { background: var(--cpc-cyan); color: #000; border-color: #fff; }
+        .side-btn.active { background: var(--cpc-cyan); color: #000; border-color: #fff; box-shadow: 0 0 10px rgba(0,173,239,0.5); }
+        .side-btn::after { content: attr(title); position: absolute; left: 60px; background: #000; color: #fff; padding: 5px; font-size: 10px; white-space: nowrap; display: none; z-index: 100; border: 1px solid var(--cpc-cyan); }
+        .side-btn:hover::after { display: block; }
+        
+        .workspace { flex: 1; position: relative; overflow: hidden; background: #333; display: flex; flex-direction: column; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: #222; padding: 10px 20px; border-bottom: 1px solid #444; justify-content: center; align-items: center; width: 100%; box-sizing: border-box; z-index: 80; }
+        .group { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border-right: 1px solid #444; padding-right: 12px; }
+        .group:last-child { border: none; }
+        .label-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        #byte-info { font-size: 9px; color: var(--cpc-cyan); font-style: italic; white-space: nowrap; }
+
+        input, select { background: #000; color: #fff; border: 1px solid #555; padding: 2px; font-family: monospace; }
+        #viewport { flex: 1; overflow: hidden; position: relative; display: flex; justify-content: center; align-items: center; background: #2a2a2a; }
+        #canvas-panner { position: absolute; transform-origin: center; display: flex; justify-content: center; align-items: center; will-change: transform; transition: none; }
+        
+        .grid { display: grid; background: #000; position: relative; border: 2px solid #555; box-shadow: 0 0 50px rgba(0,0,0,0.5); cursor: crosshair; user-select: none; }
+        .pixel { border: 1px solid rgba(255,255,255,0.05); box-sizing: border-box; position: relative; }
+        .pixel.preview::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.4); z-index: 5; }
+
+        .f-guide { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255, 165, 0, 0.8); pointer-events: none; z-index: 10; }
+        .m0 .pixel { width: 24px; height: 12px; }
+        .m1 .pixel { width: 12px; height: 12px; }
+        .m2 .pixel { width: 6px; height: 12px; }
+
+        .pal { display: flex; gap: 4px; padding: 10px; background: #000; border-top: 1px solid #444; width: 100%; justify-content: center; z-index: 80; }
+        .c-box { width: 25px; height: 25px; border: 2px solid #444; cursor: pointer; }
+        .c-box.sel { border-color: #fff; outline: 2px solid var(--cpc-cyan); }
+
+        #anim-window { display: none; position: fixed; top: 150px; left: 150px; background: #000; border: 3px solid var(--cpc-cyan); z-index: 2000; box-shadow: 0 0 30px #000; }
+        .win-header { background: var(--cpc-cyan); color: #000; padding: 5px 10px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none; }
+        .win-body { padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        #canvas { image-rendering: pixelated; background: #000; }
+        
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; }
+        .modal { background: #222; padding: 30px; border: 2px solid var(--cpc-cyan); display: flex; flex-direction: column; gap: 15px; width: 420px; text-align: center; }
+        .modal button { background: #333; border: 1px solid #555; padding: 10px; color: white; cursor: pointer; font-weight: bold; width: 100%; }
+        .modal button:hover { background: #444; border-color: var(--cpc-cyan); }
+    </style>
+</head>
+<body>
+
+<header><h1>CPC SPRITE STUDIO</h1></header>
+
+<div class="main-container">
+    <aside class="sidebar">
+        <button class="side-btn" style="color:#2ecc71" onclick="saveProject()" title="Save Project (.json)"><i>💾</i></button>
+        <button class="side-btn" style="color:#f1c40f" onclick="triggerLoad()" title="Load Project (.json)"><i>📂</i></button>
+        <input type="file" id="load-input" style="display:none" accept=".json" onchange="loadProject(this)">
+        <hr style="width:70%; border:0; border-top:1px solid #444;">
+        <button class="side-btn tool-btn active" id="btn-pen" onclick="setTool('pen')" title="Pen Tool (P)"><i>✎</i></button>
+        <button class="side-btn tool-btn" id="btn-line" onclick="setTool('line')" title="Line Tool (/)"><i>/</i></button>
+        <button class="side-btn tool-btn" id="btn-box" onclick="setTool('box')" title="Box Tool (R)"><i>□</i></button>
+        <hr style="width:70%; border:0; border-top:1px solid #444;">
+        <button class="side-btn" onclick="openFrameModal()" title="Add Frame"><i>+F</i></button>
+        <button class="side-btn" onclick="openDelFrameModal()" title="Remove Frame"><i>-F</i></button>
+        <button class="side-btn" onclick="clearFramePrompt()" title="Clear Frame Content"><i>F✂</i></button>
+        <button class="side-btn" onclick="cloneFramePrompt()" title="Clone Frame"><i>C⎘</i></button>
+        <button class="side-btn" onclick="flipHPrompt()" title="Mirror H"><i>↔</i></button>
+        <button class="side-btn" onclick="flipVPrompt()" title="Mirror V"><i>↕</i></button>
+        <button class="side-btn" onclick="rotate90Prompt()" title="Rotate 90º"><i>⟳</i></button>
+        <button class="side-btn" onclick="initGrid(true)" title="Wipe Entire Canvas"><i>♻</i></button>
+    </aside>
+
+    <div class="workspace">
+        <div class="toolbar">
+            <div class="group">
+                <div class="label-row">DIM: <input type="number" id="fw" value="16" class="auto-gen" style="width:40px">x<input type="number" id="fh" value="16" class="auto-gen" style="width:40px"></div>
+            </div>
+            <div class="group">
+                <div class="label-row">FRAMES: <input type="number" id="nf" value="4" class="auto-gen" style="width:35px"></div>
+            </div>
+            <div class="group">
+                <div class="label-row">MODE: 
+                    <select id="mode" class="auto-gen">
+                        <option value="0">0</option>
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
+                    </select>
+                </div>
+                <div id="byte-info">1 byte = 4 pixels (320x200)</div>
+            </div>
+            <div class="group">
+                <div class="label-row" style="color:var(--cpc-cyan); font-weight:bold;">ZOOM: <span id="zoom-label">100%</span></div>
+                <div style="font-size:9px;">Wheel: Zoom | Mid-Click: Pan</div>
+            </div>
+            <button class="play" onclick="initGrid(true)">GENERATE</button>
+            <button onclick="playAnim()">ANIMATE</button>
+            <button onclick="showExportMenu()" style="background:#27ae60">DATA</button>
+        </div>
+
+        <div id="viewport">
+            <div id="canvas-panner">
+                <div id="grid" class="grid"></div>
+            </div>
+        </div>
+        <div id="pal" class="pal"></div>
+    </div>
+</div>
+
+<div id="frame-modal" class="overlay">
+    <div class="modal">
+        <h2>ADD FRAME</h2>
+        <button onclick="addFrame('end')">AT THE END</button>
+        <button onclick="addFrame('start')">AT THE START</button>
+        <button onclick="addFrame('custom')">CUSTOM POSITION</button>
+        <button onclick="closeFrameModal()" style="background:#500; margin-top:10px;">CANCEL</button>
+    </div>
+</div>
+
+<div id="del-frame-modal" class="overlay">
+    <div class="modal">
+        <h2 style="color:#f66;">DELETE FRAME</h2>
+        <button onclick="removeFrame('end')">THE LAST ONE</button>
+        <button onclick="removeFrame('start')">THE FIRST ONE</button>
+        <button onclick="removeFrame('custom')">SPECIFIC POSITION</button>
+        <button onclick="closeDelFrameModal()" style="background:#444; margin-top:10px;">CANCEL</button>
+    </div>
+</div>
+
+<div id="export-overlay" class="overlay">
+    <div class="export-menu modal">
+        <h2>EXPORT DATA</h2>
+        <div style="background:#333; padding:10px; margin-bottom:10px; font-size:12px;">
+            Num Format: <label><input type="radio" name="num-format" value="hex" checked> Hex</label> <label><input type="radio" name="num-format" value="dec"> Dec</label>
+        </div>
+        <button onclick="doExport(1)">1) BASIC DATA</button>
+        <button onclick="doExport(2)">2) 8BP ASM (ROW ALIGNED)</button>
+        <button onclick="exportBinary()">3) DOWNLOAD BINARY (.BIN)</button>
+        <button onclick="closeExport()" style="background:#500; margin-top:10px; color:white">CANCEL</button>
+    </div>
+</div>
+
+<div id="anim-window">
+    <div id="win-handle" class="win-header"><span>ANIMATOR</span><button onclick="closeAnim()" style="background:#f00; border:none; padding:2px 8px; color:#fff; cursor:pointer;">X</button></div>
+    <div class="win-body"><canvas id="canvas"></canvas></div>
+    <div id="anim-status" style="text-align:center; padding:5px; font-size:11px; color:#fff;"></div>
+    <div style="background:#222; padding:5px; font-size:10px; text-align:center; color:var(--cpc-cyan);">[+] [-] Speed | [0-9] Zoom | [ESC] Close</div>
+</div>
+
+<script>
+// --- GLOBAL STATE ---
+let mode = 1, pen = 0, drawing = false, timer = null, animSpeed = 800, animZoom = 4;
+let scale = 1, posX = 0, posY = 0, isPanning = false, currentTool = 'pen', startDrawingCoords = null, currentPreviewPixels = [];
+
+// Real Amstrad CPC Palette (27 colors)
+const cpcPal = [
+    "#000000", "#000080", "#0000FF", "#800000", "#800080", "#8000FF", "#FF0000", "#FF0080", "#FF00FF",
+    "#008000", "#008080", "#0080FF", "#808000", "#808080", "#8080FF", "#FF8000", "#FF8080", "#FF80FF",
+    "#00FF00", "#00FF80", "#00FFFF", "#80FF00", "#80FF80", "#80FFFF", "#FFFF00", "#FFFF80", "#FFFFFF"
+];
+
+// Initial firmware colors for CPC modes
+const firmwareMode0 = [1, 24, 20, 6, 26, 0, 2, 8, 10, 12, 14, 16, 18, 22, 25, 15];
+const firmwareMode1 = [1, 24, 20, 6];
+
+// --- CORE FUNCTIONS ---
+function getModeColors() {
+    let indices = (mode == 0) ? firmwareMode0 : (mode == 1 ? firmwareMode1 : [1, 24]);
+    return indices.map(i => cpcPal[i]);
+}
+
+function initGrid(confirmNeeded = false) {
+    if (confirmNeeded && Array.from(document.querySelectorAll('.pixel')).some(p => parseInt(p.dataset.pen) !== 0)) {
+        if (!confirm("Wipe canvas? All unsaved changes will be lost.")) return;
+    }
+    mode = parseInt(document.getElementById('mode').value);
+    updateByteInfo();
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    const totalW = fw * nf, g = document.getElementById('grid');
+    const colors = getModeColors();
+    g.innerHTML = ''; g.className = `grid m${mode}`;
+    g.style.gridTemplateColumns = `repeat(${totalW}, auto)`;
+    const frag = document.createDocumentFragment();
+    for (let y = 0; y < fh; y++) {
+        for (let x = 0; x < totalW; x++) {
+            const p = document.createElement('div');
+            p.className = 'pixel'; p.style.background = colors[0]; p.dataset.pen = 0; p.dataset.x = x; p.dataset.y = y;
+            p.onmousedown = (e) => { 
+                if(isPanning || e.button !== 0) return;
+                e.preventDefault();
+                drawing = true; 
+                startDrawingCoords = {x, y}; 
+                if(currentTool==='pen') paint(p); 
+            };
+            p.onmouseenter = () => { if(drawing && !isPanning) { if(currentTool==='pen') paint(p); else updateShapePreview(x, y); } };
+            frag.appendChild(p);
+        }
+    }
+    g.appendChild(frag);
+    for (let i = 1; i < nf; i++) {
+        const guide = document.createElement('div');
+        guide.className = 'f-guide'; guide.style.left = (i * fw * (mode==0?24:mode==1?12:6)) + "px";
+        g.appendChild(guide);
+    }
+    buildPal();
+}
+
+function updateByteInfo() {
+    const m = parseInt(document.getElementById('mode').value);
+    const res = m===0?"160x200":m===1?"320x200":"640x200";
+    document.getElementById('byte-info').innerText = `1 byte = ${m===0?2:m===1?4:8} pixels (${res})`;
+}
+
+// --- DRAWING TOOLS ---
+function setTool(t) { currentTool = t; document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.id === 'btn-'+t)); clearPreview(); }
+function paint(el) { el.style.background = getModeColors()[pen]; el.dataset.pen = pen; }
+
+function updateShapePreview(curX, curY) {
+    clearPreview();
+    let coords = currentTool === 'line' ? bresenham(startDrawingCoords.x, startDrawingCoords.y, curX, curY) : getBoxCoords(startDrawingCoords.x, startDrawingCoords.y, curX, curY);
+    coords.forEach(c => { const p = getPixelAt(c.x, c.y); if(p) { p.classList.add('preview'); currentPreviewPixels.push(p); } });
+}
+function finalizeShape() { currentPreviewPixels.forEach(p => paint(p)); clearPreview(); }
+function clearPreview() { currentPreviewPixels.forEach(p => p.classList.remove('preview')); currentPreviewPixels = []; }
+
+function bresenham(x0, y0, x1, y1) {
+    let coords = [], dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1, dy = Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1, err = (dx > dy ? dx : -dy) / 2;
+    while (true) { coords.push({x: x0, y: y0}); if (x0 === x1 && y0 === y1) break; let e2 = err; if (e2 > -dx) { err -= dy; x0 += sx; } if (e2 < dy) { err += dx; y0 += sy; } }
+    return coords;
+}
+function getBoxCoords(x0, y0, x1, y1) {
+    let coords = [], minX = Math.min(x0, x1), maxX = Math.max(x0, x1), minY = Math.min(y0, y1), maxY = Math.max(y0, y1);
+    for(let x=minX; x<=maxX; x++) { coords.push({x, y:minY}); coords.push({x, y:maxY}); }
+    for(let y=minY; y<=maxY; y++) { coords.push({x:minX, y}); coords.push({x:maxX, y}); }
+    return coords;
+}
+function getPixelAt(x, y) {
+    const tw = parseInt(document.getElementById('fw').value) * parseInt(document.getElementById('nf').value);
+    if(x<0 || x>=tw || y<0 || y>=parseInt(document.getElementById('fh').value)) return null;
+    return document.getElementById('grid').children[y * tw + x];
+}
+
+// --- TRANSFORMS & FRAME MGMT ---
+function getFullData() {
+    const fw=parseInt(document.getElementById('fw').value), fh=parseInt(document.getElementById('fh').value), nf=parseInt(document.getElementById('nf').value), tw=fw*nf, px=document.querySelectorAll('.pixel');
+    let all = []; for(let f=0; f<nf; f++) { let fr=[]; for(let y=0; y<fh; y++) { let r=[]; for(let x=0; x<fw; x++) r.push(parseInt(px[(y*tw)+(f*fw)+x].dataset.pen)); fr.push(r); } all.push(fr); }
+    return all;
+}
+function restoreAll(data) {
+    document.getElementById('nf').value = data.length; initGrid(false);
+    const fw=parseInt(document.getElementById('fw').value), tw=fw*data.length, px=document.querySelectorAll('.pixel'), clrs=getModeColors();
+    data.forEach((f, fi) => f.forEach((r, y) => r.forEach((v, x) => { const p=px[(y*tw)+(fi*fw)+x]; if(p){ p.dataset.pen=v; p.style.background=clrs[v]; } })));
+}
+function flipHPrompt() { let f=prompt("Target frame (1-N)?")-1; if(f>=0){ let d=getFullData(); if(d[f]){ d[f]=d[f].map(r=>r.reverse()); restoreAll(d); } } }
+function flipVPrompt() { let f=prompt("Target frame (1-N)?")-1; if(f>=0){ let d=getFullData(); if(d[f]){ d[f].reverse(); restoreAll(d); } } }
+function rotate90Prompt() { let f=prompt("Target frame (1-N)?")-1; if(f>=0){ let d=getFullData(), old=d[f]; if(!old)return; if(old[0].length!=old.length){alert("Square only");return;} let n=Array(old.length).fill().map(()=>Array(old.length).fill(0)); for(let y=0;y<old.length;y++)for(let x=0;x<old.length;x++) n[x][old.length-1-y]=old[y][x]; d[f]=n; restoreAll(d); } }
+function clearFramePrompt() { let f=prompt("Target frame (1-N)?")-1; if(f>=0){ let d=getFullData(); if(d[f]){ d[f]=d[f].map(r=>r.fill(0)); restoreAll(d); } } }
+function cloneFramePrompt() { let o=prompt("Source frame (1-N)?")-1, ds=prompt("Dest frame (1-N)?")-1; if(o>=0 && ds>=0){ let d=getFullData(); if(d[o] && d[ds]){ d[ds]=JSON.parse(JSON.stringify(d[o])); restoreAll(d); } } }
+
+function openFrameModal() { document.getElementById('frame-modal').style.display='flex'; }
+function closeFrameModal() { document.getElementById('frame-modal').style.display='none'; }
+function addFrame(pos) {
+    let d=getFullData(), nf=Array(parseInt(document.getElementById('fh').value)).fill().map(()=>Array(parseInt(document.getElementById('fw').value)).fill(0));
+    if(pos==='end') d.push(nf); else if(pos==='start') d.unshift(nf); else { let i=prompt("Insert at position (1-N)?"); if(i) d.splice(parseInt(i)-1,0,nf); }
+    restoreAll(d); closeFrameModal();
+}
+function openDelFrameModal() { document.getElementById('del-frame-modal').style.display='flex'; }
+function closeDelFrameModal() { document.getElementById('del-frame-modal').style.display='none'; }
+function removeFrame(pos) {
+    let d=getFullData(); if(d.length<=1)return;
+    if(pos==='end') d.pop(); else if(pos==='start') d.shift(); else { let i=prompt("Delete frame index (1-N)?"); if(i) d.splice(parseInt(i)-1,1); }
+    restoreAll(d); closeDelFrameModal();
+}
+
+// --- EXPORT & PERSISTENCE ---
+function saveProject() {
+    const d = { config: { fw: parseInt(document.getElementById('fw').value), fh: parseInt(document.getElementById('fh').value), nf: parseInt(document.getElementById('nf').value), mode, speed: animSpeed }, pixels: Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen)) };
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], {type: "application/json"})); a.download = "sprite.json"; a.click();
+}
+function triggerLoad() { document.getElementById('load-input').click(); }
+function loadProject(input) {
+    const r = new FileReader(); r.onload = (e) => {
+        try {
+            const d = JSON.parse(e.target.result); document.getElementById('fw').value = d.config.fw; document.getElementById('fh').value = d.config.fh; document.getElementById('nf').value = d.config.nf; document.getElementById('mode').value = d.config.mode;
+            initGrid(false); const px = document.querySelectorAll('.pixel'), clr = getModeColors(); d.pixels.forEach((v, i) => { if(px[i]) { px[i].dataset.pen = v; px[i].style.background = clr[v]; } });
+        } catch(e){ alert("Invalid JSON"); }
+    }; r.readAsText(input.files[0]);
+}
+
+function doExport(type) {
+    const fw=parseInt(document.getElementById('fw').value), fh=parseInt(document.getElementById('fh').value), nf=parseInt(document.getElementById('nf').value), tw=fw*nf, data=Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen)), step=mode==1?4:mode==0?2:8, isHex=document.querySelector('input[name="num-format"]:checked').value==="hex", fmt=(n)=>isHex?"&"+n.toString(16).toUpperCase().padStart(2,'0'):n.toString();
+    let res = ""; 
+    if(type===1){ const bytes=[]; for(let i=0; i<data.length; i+=step) bytes.push(packCpcByte(data.slice(i, i+step))); for(let i=0; i<bytes.length; i+=8) res+=(100+i)+" DATA "+bytes.slice(i, i+8).map(fmt).join(",")+"\n"; } 
+    else if(type===2){ for(let f=0; f<nf; f++){ res+="\n.frame"+(f+1)+"\n"; for(let y=0; y<fh; y++){ let rb=[]; let rp=data.slice((y*tw)+(f*fw),(y*tw)+(f*fw)+fw); for(let i=0; i<rp.length; i+=step) rb.push(packCpcByte(rp.slice(i, i+step))); res+="  DB "+rb.map(fmt).join(",")+" ; Row "+y+"\n"; } } }
+    window.open().document.write("<pre>"+res+"</pre>");
+}
+
+function exportBinary() {
+    const fw=parseInt(document.getElementById('fw').value), fh=parseInt(document.getElementById('fh').value), nf=parseInt(document.getElementById('nf').value), tw=fw*nf;
+    const ppb=mode==0?2:mode==1?4:8; 
+    if((tw/ppb) != 80){ alert(`ERROR: Frame width must be 80 bytes (Current: ${tw/ppb} bytes).`); return; }
+    const buf=new Uint8Array(16384), px=Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
+    for(let y=0;y<Math.min(fh, 200);y++){ let addr=((y>>3)*80)+((y&7)*2048); for(let b=0;b<80;b++){ let pens=[]; for(let p=0;p<ppb;p++) pens.push(px[y*tw+(b*ppb)+p] || 0); buf[addr+b]=packCpcByte(pens); } }
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([buf])); a.download="screen.bin"; a.click(); closeExport();
+}
+
+function packCpcByte(p) {
+    let b=0; if(mode==1){ if(p[0]&1)b|=128;if(p[0]&2)b|=8;if(p[1]&1)b|=64;if(p[1]&2)b|=4;if(p[2]&1)b|=32;if(p[2]&2)b|=2;if(p[3]&1)b|=16;if(p[3]&2)b|=1; } 
+    else if(mode==0){ if(p[0]&1)b|=128;if(p[0]&2)b|=8;if(p[0]&4)b|=32;if(p[0]&8)b|=2;if(p[1]&1)b|=64;if(p[1]&2)b|=4;if(p[1]&4)b|=16;if(p[1]&8)b|=1; } 
+    else { for(let i=0;i<8;i++)if(p[i]&1)b|=(1<<(7-i)); } return b;
+}
+
+// --- UX & UI ---
+function buildPal() { const box=document.getElementById('pal'); box.innerHTML=''; getModeColors().forEach((c,i)=>{ let d=document.createElement('div'); d.className='c-box'+(i==pen?' sel':''); d.style.background=c; d.onclick=()=>{pen=i;buildPal();}; box.appendChild(d); }); }
+function showExportMenu(){document.getElementById('export-overlay').style.display='flex';}
+function closeExport(){document.getElementById('export-overlay').style.display='none';}
+function playAnim(){document.getElementById('anim-window').style.display='block';renderFrame();}
+function closeAnim(){if(timer)clearInterval(timer);document.getElementById('anim-window').style.display='none';}
+function renderFrame() {
+    const fw=parseInt(document.getElementById('fw').value), fh=parseInt(document.getElementById('fh').value), nf=parseInt(document.getElementById('nf').value), tw=fw*nf, canv=document.getElementById('canvas'), ctx=canv.getContext('2d'), px=document.querySelectorAll('.pixel');
+    canv.width=fw; canv.height=fh; let r=mode==0?2:mode==1?1:0.5; canv.style.width=(fw*r*animZoom*2)+"px"; canv.style.height=(fh*animZoom*2)+"px";
+    document.getElementById('anim-status').innerText=`Speed: ${animSpeed}ms | Zoom: x${animZoom}`;
+    let f=0; if(timer)clearInterval(timer); timer=setInterval(()=>{ ctx.clearRect(0,0,fw,fh); for(let y=0;y<fh;y++)for(let x=0;x<fw;x++){ let idx=y*tw+(f*fw+x); if(px[idx]){ctx.fillStyle=px[idx].style.background; ctx.fillRect(x,y,1,1);} } f=(f+1)%nf; }, animSpeed);
+}
+
+// Pan & Zoom logic
+const viewport=document.getElementById('viewport'), panner=document.getElementById('canvas-panner');
+viewport.onwheel=(e)=>{ if(document.getElementById('anim-window').style.display==='block')return; e.preventDefault(); scale=Math.min(Math.max(0.2,scale*(e.deltaY>0?0.9:1.1)),10); updateTransform(); };
+viewport.onmousedown=(e)=>{ if(e.button===1){ isPanning=true; viewport.style.cursor='grabbing'; e.preventDefault(); } };
+
+window.onmousemove=(e)=>{ if(isPanning){ posX+=e.movementX; posY+=e.movementY; updateTransform(); } };
+window.onmouseup=(e)=>{ if(drawing && currentTool!=='pen') finalizeShape(); isPanning=false; drawing=false; viewport.style.cursor='default'; };
+function updateTransform(){ panner.style.transform=`translate(${posX}px, ${posY}px) scale(${scale})`; document.getElementById('zoom-label').innerText=Math.round(scale*100)+'%'; }
+
+// Drag floating anim window
+const animWin=document.getElementById('anim-window'), handle=document.getElementById('win-handle');
+let isAnimDragging=false, animOffset=[0,0];
+handle.onmousedown=(e)=>{ isAnimDragging=true; animOffset=[animWin.offsetLeft-e.clientX, animWin.offsetTop-e.clientY]; };
+document.addEventListener('mousemove',(e)=>{ if(isAnimDragging){animWin.style.left=(e.clientX+animOffset[0])+'px'; animWin.style.top=(e.clientY+animOffset[1])+'px';} });
+
+window.onkeydown=(e)=>{ 
+    if(animWin.style.display==='block'){ if(e.key==='Escape')closeAnim(); } 
+    else { if(e.key.toLowerCase()==='p')setTool('pen'); if(e.key==='/')setTool('line'); if(e.key.toLowerCase()==='r')setTool('box'); } 
+};
+
+document.addEventListener("DOMContentLoaded", () => { initGrid(false); document.querySelectorAll('.auto-gen').forEach(i=>i.onchange=()=>initGrid(true)); });
+</script>
+</body>
+</html>

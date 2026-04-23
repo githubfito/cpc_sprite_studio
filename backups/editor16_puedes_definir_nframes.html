@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>CPC Sprite Studio - Edición Completa</title>
+    <script src="dsk-generator.js"></script>
+    <style>
+        :root { --cpc-cyan: #00adef; --cpc-dark: #111; --sidebar-w: 65px; }
+        body { font-family: 'Courier New', monospace; background: var(--cpc-dark); color: #eee; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        header { 
+            background: #000; 
+            width: 100%; 
+            padding: 10px 0; 
+            border-bottom: 2px solid var(--cpc-cyan); 
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-shrink: 0; 
+            z-index: 100; 
+        }
+
+        #file-status {
+            font-size: 11px;
+            color: #aaa;
+            text-align: right;
+            border-left: 1px solid #444;
+            padding-left: 15px;
+        }
+
+        #file-status b { color: var(--cpc-cyan); }
+        
+        .main-container { display: flex; flex: 1; overflow: hidden; position: relative; }
+        .sidebar { width: var(--sidebar-w); background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding: 15px 0; gap: 12px; flex-shrink: 0; overflow-y: auto; z-index: 95; }
+        
+        .side-btn { width: 44px; height: 44px; background: #333; border: 1px solid #555; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: 0.2s; position: relative; }
+        .side-btn:hover { background: var(--cpc-cyan); color: #000; border-color: #fff; }
+        .side-btn.active { background: var(--cpc-cyan); color: #000; border-color: #fff; box-shadow: 0 0 10px rgba(0,173,239,0.5); }
+        
+        .workspace { flex: 1; position: relative; overflow: hidden; background: #333; display: flex; flex-direction: column; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 15px; background: #222; padding: 10px 20px; border-bottom: 1px solid #444; justify-content: center; align-items: center; width: 100%; box-sizing: border-box; z-index: 80; }
+        .group { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border-right: 1px solid #444; padding-right: 12px; }
+        .label-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        #byte-info { font-size: 9px; color: var(--cpc-cyan); font-style: italic; white-space: nowrap; }
+
+        input, select { background: #000; color: #fff; border: 1px solid #555; padding: 2px; font-family: monospace; }
+        #viewport { flex: 1; overflow: hidden; position: relative; display: flex; justify-content: center; align-items: center; background: #2a2a2a; }
+        #canvas-panner { position: absolute; transform-origin: center; display: flex; justify-content: center; align-items: center; will-change: transform; }
+        
+        .grid { display: grid; background: #000; position: relative; border: 2px solid #555; cursor: crosshair; user-select: none; margin-top: 20px; }
+        .pixel { border: 1px solid rgba(255,255,255,0.05); box-sizing: border-box; position: relative; }
+        .pixel.preview::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.4); z-index: 5; }
+
+        .f-guide { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255, 165, 0, 0.8); pointer-events: none; z-index: 10; overflow: visible; }
+        .f-label { position: absolute; top: -18px; left: 2px; background: #444; color: var(--cpc-cyan); font-size: 9px; padding: 1px 4px; border: 1px solid var(--cpc-cyan); white-space: nowrap; font-weight: bold; }
+        
+        .m0 .pixel { width: 24px; height: 12px; }
+        .m1 .pixel { width: 12px; height: 12px; }
+        .m2 .pixel { width: 6px; height: 12px; }
+
+        .pal { display: flex; gap: 4px; padding: 10px; background: #000; border-top: 1px solid #444; width: 100%; justify-content: center; z-index: 80; }
+        .c-box { width: 25px; height: 25px; border: 2px solid #444; cursor: pointer; }
+        .c-box.sel { border-color: #fff; outline: 2px solid var(--cpc-cyan); }
+
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; }
+        .modal { background: #222; padding: 30px; border: 2px solid var(--cpc-cyan); display: flex; flex-direction: column; gap: 15px; width: 420px; text-align: center; }
+        .modal button { background: #333; border: 1px solid #555; padding: 10px; color: white; cursor: pointer; font-weight: bold; width: 100%; }
+        
+        #anim-window { display: none; position: absolute; top: 100px; left: 150px; background: #000; border: 3px solid var(--cpc-cyan); z-index: 2000; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .win-header { background: var(--cpc-cyan); color: #000; padding: 5px 10px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none; }
+        #canvas { image-rendering: pixelated; background: #000; display: block; margin: 0 auto; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1 style="margin:0">CPC SPRITE STUDIO</h1>
+    <div id="file-status">Archivo: <b>Ninguno</b> | Último acceso: <b>---</b></div>
+</header>
+
+<div class="main-container">
+    <aside class="sidebar">
+        <button class="side-btn" style="color:#2ecc71" onclick="saveProject()" title="Save Project"><i>💾</i></button>
+        <button class="side-btn" style="color:#f1c40f" onclick="triggerLoad()" title="Load Project"><i>📂</i></button>
+        <input type="file" id="load-input" style="display:none" accept=".json" onchange="loadProject(this)">
+        <hr style="width:70%; border:0; border-top:1px solid #444;">
+        <button class="side-btn tool-btn active" id="btn-pen" onclick="setTool('pen')" title="Pen Tool (P)"><i>✎</i></button>
+        <button class="side-btn tool-btn" id="btn-line" onclick="setTool('line')" title="Line Tool (/)"><i>/</i></button>
+        <button class="side-btn tool-btn" id="btn-box" onclick="setTool('box')" title="Box Tool (R)"><i>□</i></button>
+        <button class="side-btn tool-btn" id="btn-circle" onclick="setTool('circle')" title="Circle Tool (C)"><i>○</i></button>
+        <hr style="width:70%; border:0; border-top:1px solid #444;">
+        <button class="side-btn" onclick="addFrame()" title="Add Frame"><i>+F</i></button>
+        <button class="side-btn" onclick="removeFrame()" title="Remove Frame"><i>-F</i></button>
+        <button class="side-btn" onclick="openMirrorMenu('H')" title="Mirror H"><i>↔</i></button>
+        <button class="side-btn" onclick="openMirrorMenu('V')" title="Mirror V"><i>↕</i></button>
+        <button class="side-btn" onclick="openRotateMenu()" title="Rotate 90º"><i>⟳</i></button>
+        <button class="side-btn" onclick="initGrid(true)" title="Wipe Canvas"><i>♻</i></button>
+    </aside>
+
+    <div class="workspace">
+        <div class="toolbar">
+            <div class="group">
+                <div class="label-row">DIM: <input type="number" id="fw" value="16" style="width:40px">x<input type="number" id="fh" value="16" style="width:40px"></div>
+            </div>
+            <div class="group">
+                <div class="label-row">FRAMES: <input type="number" id="nf" value="1" style="width:35px"></div>
+            </div>
+            <div class="group">
+                <div class="label-row">MODE: 
+                    <select id="mode" onchange="updateByteInfo(); initGrid(true);">
+                        <option value="0">0</option>
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
+                    </select>
+                </div>
+                <div id="byte-info">1 byte = 4 pixels (320x200)</div>
+            </div>
+            <button onclick="playAnim()" style="background:#8e44ad; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none;">ANIMATE</button>
+            <button onclick="showExportMenu()" style="background:#27ae60; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none;">EXPORT</button>
+        </div>
+
+        <div id="viewport">
+            <div id="canvas-panner">
+                <div id="grid" class="grid"></div>
+            </div>
+        </div>
+        <div id="pal" class="pal"></div>
+    </div>
+</div>
+
+<div id="export-overlay" class="overlay">
+    <div class="modal">
+        <h2>EXPORT DATA</h2>
+        <button onclick="doExport8BP()" style="background:#2ecc71; color:white;">1) 8BP ASM (ROW ALIGNED)</button>
+        <button onclick="exportBinary()" style="background:#3498db; color:white;">2) DOWNLOAD .BIN (SCREEN)</button>
+        <button onclick="exportDSK()" style="background:#d35400; color:white;">3) DOWNLOAD .DSK (CON LOADER)</button>
+        <button onclick="closeExport()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
+    </div>
+</div>
+
+<div id="dsk-export-overlay" class="overlay">
+    <div class="modal">
+        <h2>MODO DSK</h2>
+        <button onclick="doExportDSK(true)" style="background:#8e44ad; color:white;">1) ANIMACIÓN POR HARDWARE (BASIC)</button>
+        <button onclick="doExportDSK(false)" style="background:#d35400; color:white;">2) TIRA DE FRAMES ESTÁTICA</button>
+        <button onclick="closeDSKMenu()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
+    </div>
+</div>
+
+<div id="mirror-overlay" class="overlay">
+    <div class="modal" style="width:320px;">
+        <h2 id="mirror-title">ESPEJO</h2>
+        <button onclick="doMirror('all')" style="background:#3498db; color:white;">1) ESPEJO DE TODOS</button>
+        <button onclick="doMirror('custom')" style="background:#9b59b6; color:white;">2) ESPEJO CUSTOM (ELEGIR)</button>
+        <button onclick="closeMirrorMenu()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
+    </div>
+</div>
+
+<div id="rotate-overlay" class="overlay">
+    <div class="modal" style="width:320px;">
+        <h2>ROTAR 90º</h2>
+        <button onclick="doRotate('all')" style="background:#3498db; color:white;">1) ROTAR TODOS</button>
+        <button onclick="doRotate('custom')" style="background:#9b59b6; color:white;">2) ROTAR CUSTOM (ELEGIR)</button>
+        <button onclick="closeRotateMenu()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
+    </div>
+</div>
+
+<div id="new-project-overlay" class="overlay">
+    <div class="modal">
+        <h2 id="new-project-msg" style="color: #e74c3c; font-size: 18px;"></h2>
+        <button onclick="confirmNewProject()" style="background:#2ecc71; color:white;">SÍ, comenzar proyecto</button>
+        <button onclick="cancelNewProject()" style="background:#c0392b; color:white;">NO, volver donde estaba</button>
+    </div>
+</div>
+
+<div id="anim-window">
+    <div id="win-handle" class="win-header">
+        <span>ANIMATOR</span>
+        <button onclick="closeAnim()" style="background:#f00; border:1px solid #a00; color:#fff; cursor:pointer; font-weight:bold;">X</button>
+    </div>
+    <div style="padding:15px; text-align:center;">
+        <canvas id="canvas"></canvas>
+        <div id="anim-status" style="margin-top:8px; font-size:11px; color:var(--cpc-cyan);"></div>
+        <div style="font-size:9px; color:#888; margin-top:5px;">Rueda: Zoom | +/-: Vel.</div>
+    </div>
+</div>
+
+<script>
+let mode = 1, pen = 0, drawing = false, currentTool = 'pen', startCoords = null, previewPixels = [];
+let scale = 1, posX = 0, posY = 0, isPanning = false;
+
+let animTimer = null, animSpeed = 500, animZoom = 8;
+let isAnimDragging = false, animOffset = [0, 0];
+let mirrorDir = 'H';
+
+let previousNfValue = 1;
+
+const cpcPal = ["#000000", "#000080", "#0000FF", "#800000", "#800080", "#8000FF", "#FF0000", "#FF0080", "#FF00FF", "#008000", "#008080", "#0080FF", "#808000", "#808080", "#8080FF", "#FF8000", "#FF8080", "#FF80FF", "#00FF00", "#00FF80", "#00FFFF", "#80FF00", "#80FF80", "#80FFFF", "#FFFF00", "#FFFF80", "#FFFFFF"];
+const fModes = { 0: [1, 24, 20, 6, 26, 0, 2, 8, 10, 12, 14, 16, 18, 22, 25, 15], 1: [1, 24, 20, 6], 2: [1, 24] };
+
+function getColors() { return fModes[mode].map(i => cpcPal[i]); }
+
+function updateByteInfo() {
+    mode = parseInt(document.getElementById('mode').value);
+    const info = mode == 0 ? "1 byte = 2 pixels (160x200)" : mode == 1 ? "1 byte = 4 pixels (320x200)" : "1 byte = 8 pixels (640x200)";
+    document.getElementById('byte-info').innerText = info;
+}
+
+function updateFileStatus(name) {
+    const now = new Date();
+    const timeStr = now.toLocaleDateString() + " " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    document.getElementById('file-status').innerHTML = `Archivo: <b>${name}</b> | Último acceso: <b>${timeStr}</b>`;
+}
+
+function initGrid(conf) {
+    if(conf && !confirm("Wipe canvas?")) return;
+    mode = parseInt(document.getElementById('mode').value);
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    const totalW = fw * nf, g = document.getElementById('grid');
+    g.innerHTML = ''; g.className = `grid m${mode}`;
+    g.style.gridTemplateColumns = `repeat(${totalW}, auto)`;
+    for(let i=0; i < totalW * fh; i++) {
+        const p = document.createElement('div'); p.className = 'pixel'; p.style.background = getColors()[0]; p.dataset.pen = 0;
+        p.onmousedown = (e) => { if(e.button === 0) { drawing = true; startCoords = {x: i % totalW, y: Math.floor(i / totalW)}; if(currentTool==='pen') paint(p); } };
+        p.onmouseenter = () => { if(drawing) { if(currentTool==='pen') paint(p); else updatePreview(i % totalW, Math.floor(i / totalW)); } };
+        g.appendChild(p);
+    }
+    
+    let mult = (mode == 0 ? 24 : (mode == 1 ? 12 : 6));
+    for (let i = 0; i < nf; i++) {
+        const guide = document.createElement('div'); 
+        guide.className = 'f-guide';
+        guide.style.left = (i * fw * mult) + "px";
+        if(i === 0) guide.style.background = "transparent"; 
+
+        const lbl = document.createElement('div');
+        lbl.className = 'f-label';
+        lbl.innerText = `FRAME ${i + 1}`;
+        guide.appendChild(lbl);
+        g.appendChild(guide);
+    }
+    buildPal();
+}
+
+function buildPal() {
+    const b = document.getElementById('pal'); b.innerHTML = '';
+    getColors().forEach((c, i) => {
+        const d = document.createElement('div'); d.className = 'c-box' + (i==pen?' sel':''); d.style.background = c;
+        d.onclick = () => { pen = i; buildPal(); }; b.appendChild(d);
+    });
+}
+
+function setTool(t) { currentTool = t; document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.id==='btn-'+t)); }
+function paint(el) { el.style.background = getColors()[pen]; el.dataset.pen = pen; }
+
+function getPixel(x, y) {
+    const fw = parseInt(document.getElementById('fw').value), nf = parseInt(document.getElementById('nf').value);
+    const totalW = fw * nf, fh = parseInt(document.getElementById('fh').value);
+    if(x<0 || x>=totalW || y<0 || y>=fh) return null;
+    return document.getElementById('grid').children[y * totalW + x];
+}
+
+function updatePreview(cx, cy) {
+    previewPixels.forEach(p => p.classList.remove('preview')); previewPixels = [];
+    let coords = [];
+    if(currentTool==='line') coords = bresenham(startCoords.x, startCoords.y, cx, cy);
+    if(currentTool==='box') coords = getBox(startCoords.x, startCoords.y, cx, cy);
+    if(currentTool==='circle') coords = getCircle(startCoords.x, startCoords.y, cx, cy);
+    coords.forEach(c => { const p = getPixel(c.x, c.y); if(p){ p.classList.add('preview'); previewPixels.push(p); } });
+}
+
+function bresenham(x0, y0, x1, y1) {
+    let res = [], dx = Math.abs(x1-x0), sx = x0<x1?1:-1, dy = Math.abs(y1-y0), sy = y0<y1?1:-1, err = (dx>dy?dx:-dy)/2;
+    while(true){ res.push({x:x0, y:y0}); if(x0==x1 && y0==y1) break; let e2=err; if(e2>-dx){err-=dy; x0+=sx;} if(e2<dy){err+=dx; y0+=sy;} }
+    return res;
+}
+function getBox(x0,y0,x1,y1) {
+    let res = [], xmin=Math.min(x0,x1), xmax=Math.max(x0,x1), ymin=Math.min(y0,y1), ymax=Math.max(y0,y1);
+    for(let x=xmin; x<=xmax; x++) res.push({x,y:ymin}, {x,y:ymax});
+    for(let y=ymin; y<=ymax; y++) res.push({x:xmin,y}, {x:xmax,y});
+    return res;
+}
+function getCircle(x0,y0,x1,y1) {
+    let res = [], r = Math.round(Math.sqrt(Math.pow(x1-x0,2)+Math.pow(y1-y0,2))), x=r, y=0, err=1-x;
+    while(x>=y){ res.push({x:x0+x,y:y0+y},{x:x0+y,y:y0+x},{x:x0-y,y:y0+x},{x:x0-x,y:y0+y},{x:x0-x,y:y0-y},{x:x0-y,y:y0-x},{x:x0+y,y:y0-x},{x:x0+x,y:y0-y}); y++; if(err<0) err+=2*y+1; else {x--; err+=2*(y-x)+1;} }
+    return res;
+}
+
+function getFullData() {
+    const totalW = parseInt(document.getElementById('fw').value) * parseInt(document.getElementById('nf').value);
+    const fh = parseInt(document.getElementById('fh').value), px = document.querySelectorAll('.pixel'), data = [];
+    for(let y=0; y<fh; y++) { let row = []; for(let x=0; x<totalW; x++) row.push(parseInt(px[y * totalW + x].dataset.pen)); data.push(row); }
+    return data;
+}
+function restoreData(data) {
+    const totalW = parseInt(document.getElementById('fw').value) * parseInt(document.getElementById('nf').value);
+    const px = document.querySelectorAll('.pixel'), colors = getColors();
+    data.forEach((row, y) => { row.forEach((v, x) => { const p = px[y * totalW + x]; if(p){ p.dataset.pen = v; p.style.background = colors[v]; } }); });
+}
+
+function addFrame() {
+    const nfInput = document.getElementById('nf');
+    let currentNf = parseInt(nfInput.value);
+    let pos = prompt(`¿En qué posición quieres añadir el frame? (1 a ${currentNf + 1})`, currentNf + 1);
+    if (!pos) return;
+    pos = parseInt(pos);
+    if (pos < 1 || pos > currentNf + 1) { alert("Posición inválida"); return; }
+    let data = getFullData();
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value);
+    for (let y = 0; y < fh; y++) {
+        let emptyPixels = new Array(fw).fill(0);
+        data[y].splice((pos - 1) * fw, 0, ...emptyPixels);
+    }
+    nfInput.value = currentNf + 1;
+    initGrid(false); restoreData(data); 
+}
+
+function removeFrame() {
+    const nfInput = document.getElementById('nf');
+    let currentNf = parseInt(nfInput.value);
+    if (currentNf <= 1) { alert("No puedes borrar el único frame."); return; }
+    let pos = prompt(`¿Qué frame quieres borrar? (1 a ${currentNf})`, currentNf);
+    if (!pos) return;
+    pos = parseInt(pos);
+    if (pos < 1 || pos > currentNf) { alert("Posición inválida"); return; }
+    let data = getFullData();
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value);
+    for (let y = 0; y < fh; y++) { data[y].splice((pos - 1) * fw, fw); }
+    nfInput.value = currentNf - 1;
+    initGrid(false); restoreData(data); 
+}
+
+function openMirrorMenu(dir) {
+    mirrorDir = dir;
+    document.getElementById('mirror-title').innerText = dir === 'H' ? 'ESPEJO HORIZONTAL' : 'ESPEJO VERTICAL';
+    document.getElementById('mirror-overlay').style.display = 'flex';
+}
+function closeMirrorMenu() { document.getElementById('mirror-overlay').style.display = 'none'; }
+function doMirror(mode) { closeMirrorMenu(); if (mirrorDir === 'H') flipH(mode); else flipV(mode); }
+
+function flipH(mode) {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    let frames = [];
+    if (mode === 'all') { for(let f = 0; f < nf; f++) frames.push(f); } 
+    else {
+        let ans = prompt(`¿Qué frame quieres voltear horizontalmente? (1 - ${nf})`, "1");
+        if (!ans) return;
+        let f = parseInt(ans) - 1;
+        if (f < 0 || f >= nf || isNaN(f)) { alert("Frame inválido"); return; }
+        frames.push(f);
+    }
+    let d = getFullData();
+    for (let y = 0; y < fh; y++) {
+        frames.forEach(f => {
+            let chunk = d[y].slice(f * fw, (f + 1) * fw);
+            chunk.reverse();
+            d[y].splice(f * fw, fw, ...chunk);
+        });
+    }
+    restoreData(d);
+}
+
+function flipV(mode) {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    let frames = [];
+    if (mode === 'all') { for(let f = 0; f < nf; f++) frames.push(f); } 
+    else {
+        let ans = prompt(`¿Qué frame quieres voltear verticalmente? (1 - ${nf})`, "1");
+        if (!ans) return;
+        let f = parseInt(ans) - 1;
+        if (f < 0 || f >= nf || isNaN(f)) { alert("Frame inválido"); return; }
+        frames.push(f);
+    }
+    let d = getFullData();
+    for (let y = 0; y < Math.floor(fh / 2); y++) {
+        let oppY = fh - 1 - y;
+        frames.forEach(f => {
+            let topChunk = d[y].slice(f * fw, (f + 1) * fw);
+            let botChunk = d[oppY].slice(f * fw, (f + 1) * fw);
+            d[y].splice(f * fw, fw, ...botChunk);
+            d[oppY].splice(f * fw, fw, ...topChunk);
+        });
+    }
+    restoreData(d);
+}
+
+function openRotateMenu() {
+    document.getElementById('rotate-overlay').style.display = 'flex';
+}
+
+function closeRotateMenu() {
+    document.getElementById('rotate-overlay').style.display = 'none';
+}
+
+function doRotate(mode) {
+    closeRotateMenu();
+    const fw = parseInt(document.getElementById('fw').value);
+    const fh = parseInt(document.getElementById('fh').value);
+    const nf = parseInt(document.getElementById('nf').value);
+    
+    let frames = [];
+    if (mode === 'all') { 
+        for(let f = 0; f < nf; f++) frames.push(f); 
+    } else {
+        let ans = prompt(`¿Qué frame quieres rotar 90º? (1 - ${nf})`, "1");
+        if (!ans) return;
+        let f = parseInt(ans) - 1;
+        if (f < 0 || f >= nf || isNaN(f)) { alert("Frame inválido"); return; }
+        frames.push(f);
+    }
+    
+    let d = getFullData();
+    let old = d.map(row => [...row]); 
+    
+    frames.forEach(f => {
+        let startX = f * fw;
+        for (let dy = 0; dy < fh; dy++) {
+            for (let dx = 0; dx < fw; dx++) {
+                let sx = dy;
+                let sy = fh - 1 - dx;
+                if (sx >= 0 && sx < fw && sy >= 0 && sy < fh) {
+                    d[dy][startX + dx] = old[sy][startX + sx];
+                } else {
+                    d[dy][startX + dx] = 0;
+                }
+            }
+        }
+    });
+    restoreData(d);
+}
+
+function packByte(p) {
+    let b=0; if(mode==1){ if(p[0]&1)b|=128;if(p[0]&2)b|=8;if(p[1]&1)b|=64;if(p[1]&2)b|=4;if(p[2]&1)b|=32;if(p[2]&2)b|=2;if(p[3]&1)b|=16;if(p[3]&2)b|=1; }
+    else if(mode==0){ if(p[0]&1)b|=128;if(p[0]&2)b|=8;if(p[0]&4)b|=32;if(p[0]&8)b|=2;if(p[1]&1)b|=64;if(p[1]&2)b|=4;if(p[1]&4)b|=16;if(p[1]&8)b|=1; }
+    else { for(let i=0;i<8;i++)if(p[i]&1)b|=(1<<(7-i)); } return b;
+}
+
+function doExport8BP() {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf;
+    const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen)), ppb = mode==0?2:mode==1?4:8;
+    let res = "; 8BP ASM EXPORT (ROW ALIGNED)\n";
+    for(let f=0; f<nf; f++){ res += `\n.frame${f+1}\n`; for(let y=0; y<fh; y++){ let rb = []; for(let x=0; x<fw; x+=ppb) { let c = []; for(let p=0; p<ppb; p++) c.push(px[y*totalW + (f*fw) + x + p] || 0); rb.push(packByte(c)); } res += `  DB ${rb.map(b=>"&"+b.toString(16).toUpperCase().padStart(2,'0')).join(",")} ; Row ${y}\n`; } }
+    window.open().document.write("<pre>"+res+"</pre>");
+    closeExport();
+}
+
+function getBin(animate = false) {
+    const fw = parseInt(document.getElementById('fw').value);
+    const fh = parseInt(document.getElementById('fh').value);
+    const nf = parseInt(document.getElementById('nf').value);
+    const totalW = fw * nf;
+    const ppb = mode == 0 ? 2 : mode == 1 ? 4 : 8;
+    
+    const buf = new Uint8Array(16384);
+    const px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
+    
+    let offset = 0;
+    let framesToExport = animate ? nf : 1;
+    let wBytes = Math.ceil(fw / ppb);
+    let totalWBytes = Math.ceil(totalW / ppb);
+
+    for (let f = 0; f < framesToExport; f++) {
+        for (let y = 0; y < Math.min(fh, 200); y++) {
+            let addr;
+            
+            if (animate) {
+                // Si es animado guardamos linealmente para facilitar a BASIC
+                addr = offset;
+            } else {
+                // Si es tira estática guardamos en formato entrelazado de VRAM del CPC
+                addr = (Math.floor(y / 8) * 80) + ((y % 8) * 2048);
+            }
+
+            let loopWidth = animate ? wBytes : totalWBytes;
+
+            for (let b = 0; b < loopWidth; b++) {
+                if (!animate && b >= 80) break; // Limitar al ancho de pantalla en modo estático
+
+                let pens = [];
+                for (let p = 0; p < ppb; p++) {
+                    let pixelX = animate ? (f * fw + b * ppb + p) : (b * ppb + p);
+                    pens.push(px[y * totalW + pixelX] || 0);
+                }
+                
+                if (addr + b < 16384) {
+                    buf[addr + b] = packByte(pens);
+                }
+            }
+            if (animate) offset += wBytes;
+        }
+    }
+    return buf;
+}
+
+function exportBinary() { 
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(new Blob([getBin(false)])); 
+    a.download = "screen.bin"; 
+    a.click(); 
+    closeExport(); 
+}
+
+function exportDSK() { 
+    const nf = parseInt(document.getElementById('nf').value);
+    
+    closeExport();
+    
+    if (nf > 1) {
+        document.getElementById('dsk-export-overlay').style.display = 'flex';
+    } else {
+        doExportDSK(false);
+    }
+}
+
+function closeDSKMenu() {
+    document.getElementById('dsk-export-overlay').style.display = 'none';
+}
+
+function doExportDSK(animate) {
+    const nf = parseInt(document.getElementById('nf').value);
+    const fw = parseInt(document.getElementById('fw').value);
+    const fh = parseInt(document.getElementById('fh').value);
+    
+    const buf = generateCPCDisk(getBin(animate), mode, animate, fw, fh, nf); 
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(new Blob([buf])); 
+    a.download = "juego.dsk"; 
+    a.click(); 
+    
+    closeDSKMenu();
+}
+
+function showExportMenu(){ document.getElementById('export-overlay').style.display='flex'; }
+function closeExport(){ document.getElementById('export-overlay').style.display='none'; }
+
+function confirmNewProject() {
+    document.getElementById('new-project-overlay').style.display = 'none';
+    previousNfValue = document.getElementById('nf').value;
+    initGrid(false);
+}
+
+function cancelNewProject() {
+    document.getElementById('new-project-overlay').style.display = 'none';
+    document.getElementById('nf').value = previousNfValue;
+}
+
+const vp = document.getElementById('viewport'), pn = document.getElementById('canvas-panner');
+vp.onwheel = (e) => { e.preventDefault(); scale = Math.min(Math.max(0.2, scale * (e.deltaY > 0 ? 0.9 : 1.1)), 10); pn.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; };
+vp.onmousedown = (e) => { if(e.button === 1) { isPanning = true; vp.style.cursor = 'grabbing'; e.preventDefault(); } };
+
+const animWin = document.getElementById('anim-window'), handle = document.getElementById('win-handle');
+handle.onmousedown = (e) => { isAnimDragging = true; animOffset = [animWin.offsetLeft - e.clientX, animWin.offsetTop - e.clientY]; e.preventDefault(); };
+
+window.onmousemove = (e) => { 
+    if(isPanning) { posX += e.movementX; posY += e.movementY; pn.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; } 
+    if(isAnimDragging) { animWin.style.left = (e.clientX + animOffset[0]) + 'px'; animWin.style.top = (e.clientY + animOffset[1]) + 'px'; }
+};
+
+window.onmouseup = () => { 
+    if(drawing && currentTool!=='pen'){ 
+        previewPixels.forEach(p => { paint(p); p.classList.remove('preview'); }); 
+        previewPixels=[]; 
+    } 
+    drawing = false; isPanning = false; isAnimDragging = false; vp.style.cursor = 'default'; 
+};
+
+animWin.onwheel = (e) => {
+    e.preventDefault();
+    animZoom += e.deltaY > 0 ? -1 : 1;
+    animZoom = Math.max(2, Math.min(animZoom, 40)); 
+    const cv = document.getElementById('canvas');
+    cv.style.width = (parseInt(document.getElementById('fw').value) * animZoom) + "px";
+    cv.style.height = (parseInt(document.getElementById('fh').value) * animZoom) + "px";
+};
+
+function playAnim() {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    const cv = document.getElementById('canvas'), ctx = cv.getContext('2d'); 
+    cv.width = fw; cv.height = fh; cv.style.width = (fw * animZoom) + "px"; cv.style.height = (fh * animZoom) + "px";
+    animWin.style.display = 'block'; 
+    let f = 0; if(animTimer) clearInterval(animTimer);
+    animTimer = setInterval(() => { 
+        const px = document.querySelectorAll('.pixel'); ctx.clearRect(0,0,fw,fh); 
+        for(let y=0; y<fh; y++) {
+            for(let x=0; x<fw; x++) { 
+                const p = px[y * (fw*nf) + (f*fw + x)]; 
+                if(p){ ctx.fillStyle = p.style.background; ctx.fillRect(x,y,1,1); } 
+            } 
+        }
+        f = (f+1)%nf; 
+        document.getElementById('anim-status').innerText = `Frame: ${f==0?nf:f}/${nf} | ${animSpeed}ms`; 
+    }, animSpeed);
+}
+function closeAnim() { if(animTimer) clearInterval(animTimer); animWin.style.display = 'none'; }
+
+window.onkeydown = (e) => { 
+    const keyPress = e.key.toLowerCase(); 
+    if(keyPress === 'p') setTool('pen'); 
+    if(keyPress === '/') setTool('line'); 
+    if(keyPress === 'r') setTool('box'); 
+    if(keyPress === 'c') setTool('circle'); 
+    if(keyPress === 'escape') closeAnim(); 
+    if(animWin.style.display === 'block') { 
+        if(keyPress === '+' || keyPress === '=') { animSpeed = Math.max(50, animSpeed - 50); playAnim(); } 
+        if(keyPress === '-' || keyPress === '_') { animSpeed = Math.min(2000, animSpeed + 50); playAnim(); } 
+    } 
+};
+
+function saveProject() { 
+    const name = "sprite.json";
+    const d = { 
+        config: { fw: parseInt(document.getElementById('fw').value), fh: parseInt(document.getElementById('fh').value), nf: parseInt(document.getElementById('nf').value), mode }, 
+        pixels: Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen)) 
+    }; 
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], {type: "application/json"})); 
+    a.download = name; 
+    a.click(); 
+    updateFileStatus(name);
+}
+
+function triggerLoad() { document.getElementById('load-input').click(); }
+
+function loadProject(input) { 
+    if (!input.files[0]) return;
+    const file = input.files[0];
+    const r = new FileReader(); 
+    r.onload = (e) => { 
+        const d = JSON.parse(e.target.result); 
+        document.getElementById('fw').value = d.config.fw; 
+        document.getElementById('fh').value = d.config.fh; 
+        document.getElementById('nf').value = d.config.nf; 
+        document.getElementById('mode').value = d.config.mode; 
+        initGrid(false); 
+        const px = document.querySelectorAll('.pixel'), colors = getColors(); 
+        d.pixels.forEach((v, i) => { if(px[i]) { px[i].dataset.pen = v; px[i].style.background = colors[v]; } }); 
+        updateFileStatus(file.name);
+        input.value = ''; 
+    }; 
+    r.readAsText(file); 
+}
+
+document.addEventListener("DOMContentLoaded", () => { 
+    initGrid(); 
+    document.querySelectorAll('.toolbar input').forEach(i => {
+        if (i.id === 'nf') {
+            i.onfocus = () => { previousNfValue = i.value; };
+            i.onchange = () => {
+                const msg = `¡Vas a comenzar un nuevo proyecto con ${i.value} frames, se perderán los cambios!`;
+                document.getElementById('new-project-msg').innerText = msg;
+                document.getElementById('new-project-overlay').style.display = 'flex';
+            };
+        } else {
+            i.onchange = () => initGrid(true);
+        }
+    }); 
+});
+</script>
+</body>
+</html>
