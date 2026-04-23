@@ -68,7 +68,7 @@
 <header>
     <h1 style="margin:0; display:flex; align-items:baseline; gap:10px;">
         CPC SPRITE STUDIO
-        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft</span>
+        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 18:35:00]</span>
     </h1>
     <div id="file-status">Archivo: <b>Ninguno</b> | Último acceso: <b>---</b></div>
 </header>
@@ -870,14 +870,25 @@ function doExportABASC() {
 
 function getBin(anim = false) {
     const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode==0?2:mode==1?4:8;
-    const buf = new Uint8Array(16384), px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
     let off = 0, wB = Math.ceil(fw/ppb), tB = Math.ceil(totalW/ppb);
-    if (anim) { for (let f=0; f<nf; f++) for (let y=0; y<fh; y++) for (let b=0; b<wB; b++) { let pns = []; for (let p=0; p<ppb; p++) pns.push(px[y*totalW + (f*fw) + (b*ppb) + p] || 0); if (off < 16384) buf[off++] = packByte(pns); } }
+    const actualSize = anim ? (wB * fh * nf) : 16384;
+    const buf = new Uint8Array(Math.max(16384, actualSize)), px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
+    buf.fill(0); // Garantizamos que el frame final fantasma se inicie con ceros limpios
+    if (anim) { for (let f=0; f<nf; f++) for (let y=0; y<fh; y++) for (let b=0; b<wB; b++) { let pns = []; for (let p=0; p<ppb; p++) pns.push(px[y*totalW + (f*fw) + (b*ppb) + p] || 0); if (off < buf.length) buf[off++] = packByte(pns); } }
     else { for (let y=0; y<Math.min(fh, 200); y++) { let addr = (Math.floor(y/8)*80) + ((y%8)*2048); for (let b=0; b<Math.min(tB, 80); b++) { let pns = []; for (let p=0; p<ppb; p++) pns.push(px[y*totalW + (b*ppb) + p] || 0); if (addr+b < 16384) buf[addr+b] = packByte(pns); } } }
     return buf;
 }
 function exportBinary() { let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([getBin(false)])); a.download = "screen.bin"; a.click(); closeExport(); }
-function exportDSK() { closeExport(); document.getElementById('dsk-export-overlay').style.display = 'flex'; }
+function exportDSK() { 
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    const ppb = mode==0?2:mode==1?4:8;
+    const wBytes = Math.ceil(fw / ppb);
+    const totalSize = wBytes * fh * (nf + 1); // frames reales + frame fantasma
+    if (totalSize > 26000) {
+        alert("¡LÍMITE DE MEMORIA!\n\nEl tamaño total (" + totalSize + " bytes) excede la memoria RAM continua segura del Amstrad CPC (aprox. 26 KB).\n\nEl fotograma 4 en adelante chocará con el 'workspace' del sistema de disco AMSDOS (ubicado en &A700), causando ruido visual, y el frame de borrado invadirá la memoria de video (&C000).\n\nPara cargar en BASIC sin corrupción, debes reducir el tamaño en píxeles o usar menos frames.");
+    }
+    closeExport(); document.getElementById('dsk-export-overlay').style.display = 'flex'; 
+}
 function closeDSKMenu() { document.getElementById('dsk-export-overlay').style.display = 'none'; }
 function doExportDSK(anim) { 
     const nf = parseInt(document.getElementById('nf').value), fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value); 

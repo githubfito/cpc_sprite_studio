@@ -73,20 +73,29 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed) {
         loader = `10 MEMORY &3FFF\r\n20 MODE ${mode}\r\n${inkLine}\r\n40 LOAD "SCREEN.BIN",&C000\r\n50 CALL &BB18\r\n60 GOTO 60\r\n\x1A`;
     } else {
         const delay = Math.max(1, Math.floor(animSpeed / 20));
-        loader = `10 MEMORY &3FFF\r\n20 MODE ${mode}\r\n${inkLine}\r\n40 LOAD "SCREEN.BIN",&4000\r\n` +
-                 `50 FOR i=0 TO 67: READ a: POKE &A000+i, a: NEXT i\r\n` +
+        const safeY = Math.max(0, Math.floor((200 - fh) / 2));
+        const maxPx = Math.max(0, 80 - wBytes);
+        const dxInit = maxPx > 0 ? 1 : 0;
+        loader = `10 MEMORY &3EFF\r\n20 MODE ${mode}\r\n${inkLine}\r\n40 LOAD "SCREEN.BIN",&4000\r\n` +
+                 `50 FOR i=0 TO 67: READ a: POKE &3F00+i, a: NEXT i\r\n` +
                  `51 DATA 221,110,8,221,102,9,221,78,6,221,70,0,197,229,120,230\r\n` +
                  `52 DATA 7,7,7,7,246,192,87,30,0,120,203,63,203,63,203\r\n` +
                  `53 DATA 63,111,38,0,41,41,41,41,229,41,41,193,9,25,221\r\n` +
                  `54 DATA 94,2,221,86,3,25,235,225,221,78,4,221,70,5,237,176\r\n` +
                  `55 DATA 193,4,13,32,201,201\r\n` +
+                 `56 FOR i=0 TO 26: READ a: POKE &3F50+i, a: NEXT i\r\n` +
+                 `57 DATA 221,78,0,221,70,1,120,177,200,221,110,2,221,102,3,91,84,19\r\n` +
+                 `58 DATA 54,0,11,120,177,200,237,176,201\r\n` +
                  `60 f=0: w=${wBytes}: h=${fh}: nf=${nf}\r\n` +
-                 `65 b=&4000 + (w * h * nf): FOR i=0 TO (w*h): POKE b+i,0: NEXT i\r\n` +
-                 `70 px=0: py=100: dx=1\r\n80 CLS\r\n90 WHILE 1\r\n` +
+                 `65 b=&4000 + (w * h * nf): sz=w*h\r\n` +
+                 `66 IF b > 32767 THEN b = b - 65536\r\n` +
+                 `67 CALL &3F50, b, sz\r\n` +
+                 `70 px=0: py=${safeY}: dx=${dxInit}\r\n80 CLS\r\n90 WHILE 1\r\n` +
                  `100 FOR i=1 TO ${delay}: CALL &BD19: NEXT i\r\n` + 
-                 `110 CALL &A000, b, h, w, px, py\r\n120 px = px + dx\r\n` +
-                 `130 IF px < 0 OR px > (80 - w) THEN dx = -dx: px = px + dx\r\n` +
-                 `140 s = &4000 + (f * w * h)\r\n150 CALL &A000, s, h, w, px, py\r\n` +
+                 `110 CALL &3F00, b, h, w, px, py\r\n120 px = px + dx\r\n` +
+                 `130 IF px < 0 OR px > ${maxPx} THEN dx = -dx: px = px + dx\r\n` +
+                 `140 s = &4000 + (f * w * h): IF s > 32767 THEN s = s - 65536\r\n` +
+                 `150 CALL &3F00, s, h, w, px, py\r\n` +
                  `160 f = (f + 1) MOD nf\r\n170 WEND\r\n\x1A`;
     }
 
@@ -97,27 +106,46 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed) {
     const loadAddr = animate ? 0x4000 : 0xC000;
 
     const headerBin = createAmsdosHeader("SCREEN  ", "BIN", 2, actualSize, loadAddr, 0x0000);
-    const fileBin = new Uint8Array(128 + actualSize);
+    
+    const fileRecords = Math.ceil((128 + actualSize) / 128);
+    const paddedLength = Math.ceil((128 + actualSize) / 1024) * 1024;
+    const fileBin = new Uint8Array(paddedLength);
+    
+    fileBin.fill(0);
     fileBin.set(headerBin, 0); 
-    fileBin.set(screenData.subarray(0, Math.min(screenData.length, actualSize)), 128); 
+    fileBin.set(screenData.subarray(0, Math.min(screenData.length, actualSize)), 128);
 
     let dirOffset = 512; 
-    writeDirEntry(buffer, dirOffset, "DISCO   ", "BAS", 0, Math.ceil(fileBas.length / 128), [2]);
     
-    // --- NUEVO CÓDIGO: SOPORTE PARA ARCHIVOS DE MÁS DE 16KB (2 EXTENTS) ---
-    const blocksCount = Math.ceil(fileBin.length / 1024);
-    const fileRecords = Math.ceil(fileBin.length / 128);
+    // Calculamos bloques dinámicamente para el BASIC por si supera 1KB (1 bloque = 1024 bytes)
+    const basBlocksCount = Math.ceil(fileBas.length / 1024);
+    const basBlocks = [];
+    for (let i = 0; i < basBlocksCount; i++) basBlocks.push(2 + i);
+    writeDirEntry(buffer, dirOffset, "DISCO   ", "BAS", 0, Math.ceil(fileBas.length / 128), basBlocks);
     
-    const blocksExt0 = [];
-    for(let i = 0; i < Math.min(blocksCount, 16); i++) blocksExt0.push(3 + i);
-    writeDirEntry(buffer, dirOffset + 32, "SCREEN  ", "BIN", 0, Math.min(fileRecords, 128), blocksExt0);
-
-    if (fileRecords > 128) {
-        const blocksExt1 = [];
-        for(let i = 16; i < blocksCount; i++) blocksExt1.push(3 + i);
-        writeDirEntry(buffer, dirOffset + 64, "SCREEN  ", "BIN", 1, fileRecords - 128, blocksExt1);
+    const binStartBlock = 2 + basBlocksCount;
+    
+    // --- CÓDIGO: SOPORTE MULTI-EXTENT PARA ARCHIVOS DE CUALQUIER TAMAÑO ---
+    let remainingRecords = fileRecords;
+    let currentBlockIndex = 0;
+    let extentNumber = 0;
+    
+    while (remainingRecords > 0) {
+        let recordsInThisExtent = Math.min(remainingRecords, 128);
+        let blocksInThisExtent = Math.ceil(recordsInThisExtent / 8); // 8 records por bloque de 1KB
+        
+        let blocksExt = [];
+        for (let i = 0; i < blocksInThisExtent; i++) {
+            blocksExt.push(binStartBlock + currentBlockIndex);
+            currentBlockIndex++;
+        }
+        
+        writeDirEntry(buffer, dirOffset + 32 + (extentNumber * 32), "SCREEN  ", "BIN", extentNumber, recordsInThisExtent, blocksExt);
+        
+        remainingRecords -= recordsInThisExtent;
+        extentNumber++;
     }
-    // ----------------------------------------------------------------------
+    // ----------------------------------------------------------------------------
 
     function writeData(startBlock, dataArray) {
         for (let i = 0; i < dataArray.length; i++) {
@@ -133,6 +161,6 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed) {
     }
 
     writeData(2, fileBas);
-    writeData(3, fileBin);
+    writeData(binStartBlock, fileBin);
     return buffer;
 }
