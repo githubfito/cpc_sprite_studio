@@ -75,6 +75,7 @@
 
 <div class="main-container">
     <aside class="sidebar">
+        <button class="side-btn" style="color:#3498db" onclick="startNewProject(false)" title="New Project"><i>📄</i></button>
         <button class="side-btn" style="color:#2ecc71" onclick="saveProject()" title="Save Project"><i>💾</i></button>
         <button class="side-btn" style="color:#f1c40f" onclick="triggerLoad()" title="Load Project"><i>📂</i></button>
         <button class="side-btn" style="color:var(--cpc-cyan)" onclick="showHardwareColors()" title="Hardware List"><i>PAL</i></button>
@@ -888,6 +889,19 @@ function closeExport(){ document.getElementById('export-overlay').style['display
 function confirmNewProject() { document.getElementById('new-project-overlay').style.display = 'none'; saveState(); previousNfValue = document.getElementById('nf').value; initGrid(false); }
 function cancelNewProject() { document.getElementById('new-project-overlay').style.display = 'none'; document.getElementById('nf').value = previousNfValue; }
 
+function startNewProject(force = false) {
+    if (!force && !confirm("¿Empezar un proyecto nuevo? Perderás todos los cambios no guardados.")) return;
+    document.getElementById('mode').value = 0;
+    document.getElementById('fw').value = 16;
+    document.getElementById('fh').value = 32;
+    document.getElementById('nf').value = 3;
+    undoStack = [];
+    updateFileStatus("Ninguno");
+    updateByteInfo();
+    pen = 1;
+    initGrid(false);
+}
+
 const vp = document.getElementById('viewport'), pn = document.getElementById('canvas-panner');
 vp.onwheel = (e) => { e.preventDefault(); scale = Math.min(Math.max(0.05, scale * (e.deltaY > 0 ? 0.9 : 1.1)), 20); pn.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; };
 vp.onmousedown = (e) => { if(e.button === 1) { isPanning = true; vp.style.cursor = 'grabbing'; e.preventDefault(); } };
@@ -953,7 +967,7 @@ function loadProject(i) {
 }
 
 document.addEventListener("DOMContentLoaded", () => { 
-    initGrid(); document.querySelectorAll('.toolbar input:not(#full-shift-cb, #hide-grid-cb, #transparent-bg-cb)').forEach(i => {
+    startNewProject(true); document.querySelectorAll('.toolbar input:not(#full-shift-cb, #hide-grid-cb, #transparent-bg-cb)').forEach(i => {
         if (i.id === 'nf') { i.onfocus = () => { previousNfValue = i.value; }; i.onchange = () => { document.getElementById('new-project-msg').innerText = `Cambio a ${i.value} frames.`; document.getElementById('new-project-overlay').style.display = 'flex'; };
         } else i.onchange = () => initGrid(true);
     }); 
