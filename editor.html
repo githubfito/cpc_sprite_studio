@@ -1034,6 +1034,16 @@ window.onkeydown = (e) => {
         }
     }
 
+        if (kP === 'delete') {
+            if (currentTool === 'select' && previewPixels.length > 0) {
+                e.preventDefault();
+                saveState();
+                const colors = getColors();
+                previewPixels.forEach(p => { p.dataset.pen = pen; p.style.background = colors[pen]; });
+                return;
+            }
+        }
+
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(kP)) {
         e.preventDefault(); let dir = 'L'; if (kP === 'arrowright') dir = 'R'; if (kP === 'arrowup') dir = 'U'; if (kP === 'arrowdown') dir = 'D';
         if (isShiftMode && currentHoveredFrame > 0) shiftFrameDirect(currentHoveredFrame-1, dir);
