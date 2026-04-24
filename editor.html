@@ -133,7 +133,7 @@
                     <label for="transparent-bg-cb" style="cursor:pointer;">Ignore Ink 0 on Paste</label>
                 </div>
                 <div style="display:flex; align-items:center; gap:5px;">
-                    <input type="checkbox" id="hide-grid-cb" onchange="toggleGridLines()">
+                <input type="checkbox" id="hide-grid-cb" onclick="toggleGridLines()">
                     <label for="hide-grid-cb" style="cursor:pointer;">Hide Grid</label>
                 </div>
                 <div style="display:flex; align-items:center; gap:5px;">
@@ -677,6 +677,8 @@ function drawTextOnGrid(text, fontSize, startX, startY, spill) {
     const currentFrame = Math.floor(startX / fw);
     const frameStartX = currentFrame * fw;
     
+    let pixelsDrawn = 0;
+
     for (let y = 0; y < fh; y++) {
         for (let x = 0; x < cv.width; x++) {
             if (imgData[(y * cv.width + x) * 4 + 3] > 127) { // Si tiene opacidad
@@ -689,10 +691,16 @@ function drawTextOnGrid(text, fontSize, startX, startY, spill) {
                     if (p) {
                         p.dataset.pen = pen;
                         p.style.background = colors[pen];
+                        pixelsDrawn++;
                     }
                 }
             }
         }
+    }
+
+    if (pixelsDrawn === 0) {
+        alert("Todo el texto ha quedado fuera de los límites del sprite.\nPor favor, intenta de nuevo ajustando el tamaño de la fuente o haciendo clic en otra posición.");
+        undoStack.pop(); // Eliminamos el punto de guardado vacío
     }
 }
 
@@ -1066,7 +1074,7 @@ function loadProject(i) {
 }
 
 document.addEventListener("DOMContentLoaded", () => { 
-    startNewProject(true); document.querySelectorAll('.toolbar input:not(#full-shift-cb, #hide-grid-cb, #transparent-bg-cb)').forEach(i => {
+    startNewProject(true); document.querySelectorAll('.toolbar input:not(#full-shift-cb, #hide-grid-cb, #transparent-bg-cb, #spill-text-cb)').forEach(i => {
         if (i.id === 'nf') { i.onfocus = () => { previousNfValue = i.value; }; i.onchange = () => { document.getElementById('new-project-msg').innerText = `¿Cambiar a ${i.value} frames? Esto BORRARÁ el lienzo actual.`; document.getElementById('new-project-overlay').style.display = 'flex'; };
         } else i.onchange = () => initGrid(true);
     }); 
