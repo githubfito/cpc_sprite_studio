@@ -87,6 +87,7 @@
         <button class="side-btn tool-btn" id="btn-circle" onclick="setTool('circle')" title="Circle Tool (C)"><i>○</i><span class="hotkey">C</span></button>
         <button class="side-btn tool-btn" id="btn-select" onclick="setTool('select')" title="Select Fragment (S)"><i>⬚</i><span class="hotkey">S</span></button>
         <button class="side-btn tool-btn" id="btn-fill" onclick="setTool('fill')" title="Paint Bucket (G)"><i>▅</i><span class="hotkey">G</span></button>
+        <button class="side-btn tool-btn" id="btn-text" onclick="setTool('text')" title="Text Tool (T)"><i>T</i><span class="hotkey">T</span></button>
         <hr style="width:70%; border:0; border-top:1px solid #444;">
         <button class="side-btn" onclick="addFrame()" title="Add Frame"><i>+F</i></button>
         <button class="side-btn" onclick="removeFrame()" title="Remove Frame"><i>-F</i></button>
@@ -134,6 +135,10 @@
                 <div style="display:flex; align-items:center; gap:5px;">
                     <input type="checkbox" id="hide-grid-cb" onchange="toggleGridLines()">
                     <label for="hide-grid-cb" style="cursor:pointer;">Hide Grid</label>
+                </div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <input type="checkbox" id="spill-text-cb">
+                    <label for="spill-text-cb" style="cursor:pointer;">Spill Text</label>
                 </div>
                 <button onclick="showHelpMenu()" style="background:#444; color:#fff; border:1px solid #666; padding:3px 8px; font-size:10px; cursor:pointer; border-radius:3px; font-weight:bold;">HELP</button>
             </div>
@@ -530,6 +535,7 @@ function initGrid(conf) {
                 previewPixels.forEach(pp => { pp.classList.remove('preview'); pp.classList.remove('select-preview'); });
                 previewPixels = [];
                 if (currentTool === 'fill') floodFill(i % totalW, Math.floor(i / totalW), parseInt(p.dataset.pen));
+                else if (currentTool === 'text') handleTextTool(i % totalW, Math.floor(i / totalW));
                 else { 
                     saveState(); 
                     drawing = true; 
@@ -619,6 +625,74 @@ function floodFill(startX, startY, targetPen) {
         if (x < fMinX || x > fMaxX || y < 0 || y >= fh || visited.has(key(x,y))) continue;
         let p = px[y * totalW + x];
         if (parseInt(p.dataset.pen) === targetPen) { p.dataset.pen = pen; p.style.background = colors[pen]; visited.add(key(x,y)); q.push({x: x+1, y}, {x: x-1, y}, {x, y: y+1}, {x, y: y-1}); }
+    }
+}
+
+function handleTextTool(x, y) {
+    const textToDraw = prompt("Introduce el texto a dibujar:");
+    if (!textToDraw) return;
+
+    const fw = parseInt(document.getElementById('fw').value);
+    const fh = parseInt(document.getElementById('fh').value);
+    const totalW = fw * parseInt(document.getElementById('nf').value);
+    const spill = document.getElementById('spill-text-cb').checked;
+    const maxW = spill ? (totalW - x) : fw;
+
+    const tempCv = document.createElement('canvas');
+    const tempCtx = tempCv.getContext('2d');
+    
+    let suggestedSize = fh; // Altura máxima inicial
+    tempCtx.font = `${suggestedSize}px "Courier New"`;
+    let metrics = tempCtx.measureText(textToDraw);
+    
+    // Reducimos el tamaño de la fuente hasta que quepa en el ancho del sprite
+    while (metrics.width > maxW && suggestedSize > 4) {
+        suggestedSize--;
+        tempCtx.font = `${suggestedSize}px "Courier New"`;
+        metrics = tempCtx.measureText(textToDraw);
+    }
+    
+    const finalSize = prompt(`Tamaño sugerido para que quepa en ${spill ? 'el espacio restante' : 'el sprite'}:`, suggestedSize);
+    if (!finalSize || isNaN(finalSize)) return;
+
+    saveState();
+    drawTextOnGrid(textToDraw, parseInt(finalSize), x, y, spill);
+}
+
+function drawTextOnGrid(text, fontSize, startX, startY, spill) {
+    const fw = parseInt(document.getElementById('fw').value);
+    const fh = parseInt(document.getElementById('fh').value);
+    const totalW = fw * parseInt(document.getElementById('nf').value);
+
+    const cv = document.createElement('canvas');
+    cv.width = spill ? totalW : fw; cv.height = fh;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    
+    ctx.fillStyle = "white"; ctx.textBaseline = "top";
+    ctx.font = `${fontSize}px "Courier New"`;
+    ctx.fillText(text, 0, 0);
+    
+    const imgData = ctx.getImageData(0, 0, cv.width, cv.height).data;
+    const colors = getColors();
+    const currentFrame = Math.floor(startX / fw);
+    const frameStartX = currentFrame * fw;
+    
+    for (let y = 0; y < fh; y++) {
+        for (let x = 0; x < cv.width; x++) {
+            if (imgData[(y * cv.width + x) * 4 + 3] > 127) { // Si tiene opacidad
+                const gridX = startX + x;
+                const gridY = startY + y;
+                // Comprobamos límites según si permitimos derramamiento o no
+                const withinBounds = spill ? (gridX < totalW && gridY < fh) : (gridX >= frameStartX && gridX < frameStartX + fw && gridY < fh);
+                if (withinBounds) {
+                    const p = getPixel(gridX, gridY);
+                    if (p) {
+                        p.dataset.pen = pen;
+                        p.style.background = colors[pen];
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -968,6 +1042,7 @@ window.onkeydown = (e) => {
     if ((kP === 'h' || kP === 'v') && currentHoveredFrame > 0 && Date.now() - lastMirrorTime >= 1000) { if (kP === 'h') flipHDirect(currentHoveredFrame - 1); else flipVDirect(currentHoveredFrame - 1); lastMirrorTime = Date.now(); }
     if (kP === 't' && currentHoveredFrame > 0 && Date.now() - lastRotateTime >= 1000) { rotateDirect(currentHoveredFrame - 1); lastRotateTime = Date.now(); }
     if(kP === 'p') setTool('pen'); if(kP === '/') setTool('line'); if(kP === 'r') setTool('box'); if(kP === 'c') setTool('circle'); if(kP === 's') setTool('select'); if(kP === 'g') setTool('fill'); if(kP === 'escape') closeAnim(); 
+    if(kP === 'p') setTool('pen'); if(kP === '/') setTool('line'); if(kP === 'r') setTool('box'); if(kP === 'c') setTool('circle'); if(kP === 's') setTool('select'); if(kP === 'g') setTool('fill'); if(kP === 't') setTool('text'); if(kP === 'escape') closeAnim(); 
     if(animWin.style.display === 'block') { if(kP === '+' || kP === '=') { animSpeed = Math.max(50, animSpeed - 50); playAnim(); } if(kP === '-' || kP === '_') { animSpeed = Math.min(2000, animSpeed + 50); playAnim(); } } 
 };
 
