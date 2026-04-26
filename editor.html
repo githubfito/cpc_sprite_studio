@@ -68,7 +68,7 @@
 <header>
     <h1 style="margin:0; display:flex; align-items:baseline; gap:10px;">
         CPC SPRITE STUDIO
-        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 23:25:00]</span>
+        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 26/04/2026]</span>
     </h1>
     <div id="file-status">Archivo: <b>Ninguno</b> | Último acceso: <b>---</b></div>
 </header>
@@ -94,7 +94,7 @@
         <button class="side-btn" onclick="pasteFromClipboard()" title="Paste Image from Clipboard"><i>📋</i></button>
         <button class="side-btn" onclick="openMirrorMenu('H')" title="Mirror H"><i>↔</i><span class="hotkey">H</span></button>
         <button class="side-btn" onclick="openMirrorMenu('V')" title="Mirror V"><i>↕</i><span class="hotkey">V</span></button>
-        <button class="side-btn" onclick="openRotateMenu()" title="Rotate 90º"><i>⟳</i><span class="hotkey">T</span></button>
+        <button class="side-btn" onclick="openRotateMenu()" title="Rotate 90º"><i>⟳</i><span class="hotkey">Q</span></button>
         <button class="side-btn" id="btn-shift-mode" onclick="toggleShiftMode()" title="Toggle Shift Mode (Use Arrows)"><i>✥</i></button>
         <button class="side-btn" onclick="initGrid(true)" title="Wipe Canvas"><i>♻</i></button>
     </aside>
@@ -491,7 +491,7 @@ function processPastedImage(img) {
 function saveState() {
     const px = document.querySelectorAll('.pixel'); if (px.length === 0) return;
     const d = { config: { fw: currentConfig.fw, fh: currentConfig.fh, nf: currentConfig.nf, mode: currentConfig.mode }, pixels: Array.from(px).map(p => parseInt(p.dataset.pen)) };
-    undoStack.push(d); if (undoStack.length > 20) undoStack.shift();
+    undoStack.push(d); if (undoStack.length > 50) undoStack.shift();
 }
 function undo() {
     if (undoStack.length === 0) return;
@@ -1058,8 +1058,7 @@ window.onkeydown = (e) => {
         else if (document.getElementById('full-shift-cb').checked) shiftAllDirect(dir);
     }
     if ((kP === 'h' || kP === 'v') && currentHoveredFrame > 0 && Date.now() - lastMirrorTime >= 1000) { if (kP === 'h') flipHDirect(currentHoveredFrame - 1); else flipVDirect(currentHoveredFrame - 1); lastMirrorTime = Date.now(); }
-    if (kP === 't' && currentHoveredFrame > 0 && Date.now() - lastRotateTime >= 1000) { rotateDirect(currentHoveredFrame - 1); lastRotateTime = Date.now(); }
-    if(kP === 'p') setTool('pen'); if(kP === '/') setTool('line'); if(kP === 'r') setTool('box'); if(kP === 'c') setTool('circle'); if(kP === 's') setTool('select'); if(kP === 'g') setTool('fill'); if(kP === 'escape') closeAnim(); 
+    if (kP === 'q' && currentHoveredFrame > 0 && Date.now() - lastRotateTime >= 1000) { rotateDirect(currentHoveredFrame - 1); lastRotateTime = Date.now(); }
     if(kP === 'p') setTool('pen'); if(kP === '/') setTool('line'); if(kP === 'r') setTool('box'); if(kP === 'c') setTool('circle'); if(kP === 's') setTool('select'); if(kP === 'g') setTool('fill'); if(kP === 't') setTool('text'); if(kP === 'escape') closeAnim(); 
     if(animWin.style.display === 'block') { if(kP === '+' || kP === '=') { animSpeed = Math.max(50, animSpeed - 50); playAnim(); } if(kP === '-' || kP === '_') { animSpeed = Math.min(2000, animSpeed + 50); playAnim(); } } 
 };
