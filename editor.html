@@ -27,7 +27,7 @@
         #canvas-panner { position: absolute; transform-origin: center; display: flex; justify-content: center; align-items: center; will-change: transform; }
         .grid { display: grid; background: #000; position: relative; border: 2px solid #555; cursor: crosshair; user-select: none; margin-top: 20px; }
         .pixel { border: 1px solid rgba(255,255,255,0.05); box-sizing: border-box; position: relative; }
-        .grid.hide-lines .pixel { border: none !important; }
+        .grid.hide-lines .pixel { border-color: transparent !important; }
         .pixel.preview::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.4); z-index: 5; }
         .pixel.select-preview::after { content: ''; position: absolute; inset: 0; background: rgba(241, 196, 15, 0.3); border: 1px dashed #f1c40f; z-index: 5; }
         .f-guide { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255, 165, 0, 0.8); pointer-events: none; z-index: 10; overflow: visible; }
@@ -133,7 +133,7 @@
                     <label for="transparent-bg-cb" style="cursor:pointer;">Ignore Ink 0 on Paste</label>
                 </div>
                 <div style="display:flex; align-items:center; gap:5px;">
-                <input type="checkbox" id="hide-grid-cb" onclick="toggleGridLines()">
+            <input type="checkbox" id="hide-grid-cb" onchange="toggleGridLines()">
                     <label for="hide-grid-cb" style="cursor:pointer;">Hide Grid</label>
                 </div>
                 <div style="display:flex; align-items:center; gap:5px;">
