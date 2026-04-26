@@ -246,6 +246,7 @@
         <button onclick="exportBinary()" style="background:#3498db; color:white;">2) DOWNLOAD .BIN (SCREEN)</button>
         <button onclick="exportDSK()" style="background:#d35400; color:white;">3) DOWNLOAD .DSK (CON LOADER)</button>
         <button onclick="doExportABASC()" style="background:#f1c40f; color:black; font-weight:bold;">4) ABASC DATA (WORDS)</button>
+        <button onclick="doExportC()" style="background:#9b59b6; color:white; font-weight:bold;">5) C ARRAY ({ 0x00... })</button>
         <button onclick="closeExport()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
     </div>
 </div>
@@ -928,7 +929,7 @@ function unpackByte(b) {
 function doExport8BP() {
     const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode == 0 ? 2 : mode == 1 ? 4 : 8, wBytes = Math.ceil(fw / ppb);
     const px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen)); 
-    let res = "; 8BP ASM Export\n";
+    let res = `; 8BP ASM Export\n; CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${fModes[mode].join(', ')}]\n`;
     for (let f = 0; f < nf; f++) {
         res += `\n.frame${f + 1}\n  DB &${wBytes.toString(16).padStart(2, '0')}, &${fh.toString(16).padStart(2, '0')} ; Metadata (W bytes, H pixels)\n`;
         for (let y = 0; y < fh; y++) {
@@ -941,7 +942,7 @@ function doExport8BP() {
 
 function doExportABASC() {
     const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode==0?2:mode==1?4:8, bPR = Math.ceil(fw/ppb);
-    let res = "' ABASC DATA\n"; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
+    let res = `' ABASC DATA\n' CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${fModes[mode].join(', ')}]\n`; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
     for (let f = 0; f < nf; f++) {
         res += `\nLABEL FRAME${f + 1}:\n    DATA &${fh.toString(16).padStart(2,'0')}${bPR.toString(16).padStart(2,'0')}\n`;
         for (let y = 0; y < fh; y++) {
@@ -949,6 +950,23 @@ function doExportABASC() {
             let words = []; for (let i = 0; i < rb.length; i += 2) words.push("&" + ((rb[i+1]||0).toString(16).padStart(2,'0') + rb[i].toString(16).padStart(2,'0')).toUpperCase());
             res += `    DATA ${words.join(", ")}\n`;
         }
+    }
+    window.open().document.write("<pre>" + res + "</pre>"); closeExport();
+}
+
+function doExportC() {
+    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode==0?2:mode==1?4:8;
+    let res = `// CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${fModes[mode].join(', ')}]\n`;
+    res += "\n"; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
+    for (let f = 0; f < nf; f++) {
+        let frameName = "sprite_data" + f.toString().padStart(2, '0');
+        res += `const unsigned char ${frameName}[] = {\n`;
+        res += `    // Frame ${f + 1}\n`;
+        for (let y = 0; y < fh; y++) {
+            let rb = []; for (let x = 0; x < fw; x += ppb) { let pns = []; for (let p = 0; p < ppb; p++) pns.push(px[y * totalW + (f * fw) + x + p] || 0); rb.push("0x" + packByte(pns).toString(16).toUpperCase().padStart(2, '0')); }
+            res += `    ${rb.join(", ")},\n`;
+        }
+        res += "};\n\n";
     }
     window.open().document.write("<pre>" + res + "</pre>"); closeExport();
 }
