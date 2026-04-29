@@ -162,7 +162,7 @@
             <h3>1. Project Management & Basic Setup</h3>
             <ul>
             <li><b>Save/Load Project <span class="hotkey-tag">JSON</span>:</b> Use the Floppy Disk and Folder icons on the top left, or press <span class="hotkey-tag">Ctrl+S</span> to Quick Save. Saves the workspace configuration and all pixels. <span class="example">Example: Make a backup of your character sheet before making destructive palette changes.</span></li>
-            <li><b>Undo <span class="hotkey-tag">Ctrl+Z</span>:</b> Reverts your last drawing action or transformation.</li>
+            <li><b>Undo <span class="hotkey-tag">Ctrl+Z</span>:</b> Reverts your last drawing action or transformation (up to 50 states).</li>
                 <li><b>Canvas Dimensions:</b> Change width (`DIM: x`) and height (`DIM: y`). The canvas dynamically recalculates the bytes needed depending on the selected CPC Mode.</li>
                 <li><b>Amstrad CPC Video Modes:</b> 
                     <ul>
@@ -181,6 +181,7 @@
                 <li><b>Circle <span class="hotkey-tag">C</span>:</b> Draws a perfect circle outline.</li>
                 <li><b>Paint Bucket <span class="hotkey-tag">G</span>:</b> Fills an enclosed area of the same color with the currently selected color.</li>
                 <li><b>Select Fragment <span class="hotkey-tag">S</span>:</b> Click and drag to select a specific rectangular area. Press <span class="hotkey-tag">Ctrl+C</span> to copy, and <span class="hotkey-tag">Ctrl+V</span> to paste it anywhere on the canvas.</li>
+                <li><b>Text Tool <span class="hotkey-tag">T</span>:</b> Click anywhere to type text directly onto the canvas. Allows dynamic font resizing and auto-spill over frames.</li>
             <li><b>Hide Grid:</b> Check the "Hide Grid" box on the top toolbar to remove the grid lines and preview your sprite as it will look on a real CRT.</li>
             </ul>
 
@@ -193,7 +194,7 @@
             <h3>4. Transformations & Canvas Shifting</h3>
             <ul>
                 <li><b>Mirror H / V:</b> Flips the sprite horizontally or vertically. You can apply it to the entire sequence or just a single specific frame. <span class="example">Example: Drawing a character facing right, then duplicating the frame and applying Mirror H to make them face left.</span></li>
-                <li><b>Rotate 90º:</b> Rotates the canvas data by 90 degrees clockwise.</li>
+                <li><b>Rotate 90º <span class="hotkey-tag">Q</span>:</b> Rotates the canvas data by 90 degrees clockwise.</li>
                 <li><b>Fix M0 Width:</b> Special tool for Mode 0. It halves the canvas width, compressing the pixels. <span class="example">Example: You drew a 32-width Mode 0 sprite, but CPC Mode 0 pixels are double-width, meaning you only needed 16 bytes. This fixes it instantly without redrawing.</span></li>
                 <li><b>Shift Mode <span class="hotkey-tag">✥</span>:</b> Click this to activate. When active, use the Keyboard Arrow keys to nudge the pixels of the currently hovered frame 1 pixel in any direction. <span class="example">Example: Fixing a sprite that was drawn slightly off-center without redrawing it.</span></li>
                 <li><b>Full Sprite Shift Checkbox:</b> If checked, using the arrow keys will move the content of ALL frames simultaneously instead of just the hovered one.</li>
@@ -211,10 +212,12 @@
                 <li><b>Import (ABASC / 8BP / C):</b> Paste ASM code (`DB`, `DEFB`), BASIC `DATA` lines, or C Arrays (`{0x00, 0xFF}`). The engine automatically decodes the bytes and draws them onto the canvas.</li>
                 <li><b>Export Menu:</b>
                     <ul>
+                        <li><b>Decimal values:</b> Checkbox to export values as decimal numbers instead of hexadecimal (for ASM and C).</li>
                         <li><b>8BP ASM:</b> Exports row-aligned Assembler code ready for 8BP or standard Z80 dev.</li>
                         <li><b>Download .BIN:</b> Raw binary memory dump of the screen.</li>
                         <li><b>Download .DSK:</b> Generates a bootable floppy disk with a BASIC loader. You can choose <b>Animated</b> (hardware loop) or <b>Static Frame Strip</b>. <span class="example">Note: The editor will warn you if your sprites exceed the ~26KB continuous RAM limit of a standard 64K CPC!</span></li>
                         <li><b>ABASC DATA:</b> Exports structured `DATA` lines using Words for the ABASC compiler.</li>
+                        <li><b>C Array:</b> Exports a C-compatible array (`{0x00...}`) separated by frames (`sprite_data00`, etc.).</li>
                     </ul>
                 </li>
             </ul>
@@ -242,6 +245,10 @@
 <div id="export-overlay" class="overlay">
     <div class="modal">
         <h2>EXPORT DATA</h2>
+        <div style="display:flex; align-items:center; justify-content:center; gap:5px; margin-bottom:10px; color:#aaa; font-size:12px;">
+            <input type="checkbox" id="export-decimal-cb">
+            <label for="export-decimal-cb" style="cursor:pointer;">Decimal values (for ASM/C)</label>
+        </div>
         <button onclick="doExport8BP()" style="background:#2ecc71; color:white;">1) 8BP ASM (ROW ALIGNED)</button>
         <button onclick="exportBinary()" style="background:#3498db; color:white;">2) DOWNLOAD .BIN (SCREEN)</button>
         <button onclick="exportDSK()" style="background:#d35400; color:white;">3) DOWNLOAD .DSK (CON LOADER)</button>
@@ -834,7 +841,7 @@ function processImport() {
         const isDataLine = dataRegex.test(clean);
         if (!isDataLine) {
             if (cF) fF.push(cF);
-            cF = { label: clean.replace(':', '').replace('_', '').trim().toLowerCase(), data: [], wBytes: 0, h: 0, dimsFound: false, tempDims: [] };
+            cF = { label: clean.replace(':', '').replace('_', '').trim().toLowerCase(), data: [], wBytes: 0, h: 0, dimsFound: false, tempDims: [], isWordMode: false };
         } else if (cF) {
             let vals = clean.replace(dataRegex, '').split(',').map(v => v.trim()).filter(v => v !== '').map(v => {
                 const uv = v.toUpperCase();
@@ -848,6 +855,7 @@ function processImport() {
             if (!cF.dimsFound) {
                 if (vals.length === 1 && vals[0] > 255) {
                     cF.h = (vals[0] >> 8) & 0xFF; cF.wBytes = vals[0] & 0xFF; cF.dimsFound = true;
+                    cF.isWordMode = true;
                 } else if (vals.length === 2 && cF.tempDims.length === 0) {
                     cF.wBytes = vals[0]; cF.h = vals[1]; cF.dimsFound = true;
                 } else if (vals.length === 1) {
@@ -866,9 +874,9 @@ function processImport() {
         let wI = prompt("No se detectó cabecera de tamaño.\n¿ANCHO en BYTES?", "6"), hI = prompt("¿ALTO píxeles?", "16");
         if (wI && hI) fF.forEach(f => { if(f.wBytes === 0) { f.wBytes = parseInt(wI); f.h = parseInt(hI); } }); else return;
     }
-    let report = ""; const isWordMode = fF.some(f => f.data.some(v => v > 255));
+    let report = ""; const isWordMode = fF.some(f => f.isWordMode || f.data.some(v => v > 255));
     fF.forEach(f => {
-        let expected = f.wBytes * f.h, actual = isWordMode ? f.data.length * 2 : f.data.length;
+        let expected = (isWordMode ? Math.ceil(f.wBytes / 2) * 2 : f.wBytes) * f.h, actual = isWordMode ? f.data.length * 2 : f.data.length;
         if (actual < expected) {
             let diff = expected - actual, fillCount = isWordMode ? Math.ceil(diff / 2) : diff;
             for (let i = 0; i < fillCount; i++) f.data.push(0);
@@ -885,7 +893,7 @@ function processImport() {
 }
 
 function applyImportedFrames(fF, oT) {
-    const isWordMode = fF.some(f => f.data.some(v => v > 255));
+    const isWordMode = fF.some(f => f.isWordMode || f.data.some(v => v > 255));
     fF.forEach((f, i) => {
         if (f.wBytes === 0 && f.h === 0 && f.data.length >= 2) { f.wBytes = f.data.shift(); f.h = f.data.shift(); }
     });
@@ -909,6 +917,7 @@ function applyImportedFrames(fF, oT) {
                 }
                 bI++;
             }
+            if (isWordMode && f.wBytes % 2 !== 0) bI++; // Salta el padding del final de fila en exportación por words
         }
     });
     closeImport(); updateByteInfo();
@@ -927,14 +936,15 @@ function unpackByte(b) {
 }
 
 function doExport8BP() {
+    const useDecimal = document.getElementById('export-decimal-cb').checked;
     const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode == 0 ? 2 : mode == 1 ? 4 : 8, wBytes = Math.ceil(fw / ppb);
     const px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen)); 
     let res = `; 8BP ASM Export\n; CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${fModes[mode].join(', ')}]\n`;
     for (let f = 0; f < nf; f++) {
-        res += `\n.frame${f + 1}\n  DB &${wBytes.toString(16).padStart(2, '0')}, &${fh.toString(16).padStart(2, '0')} ; Metadata (W bytes, H pixels)\n`;
+        res += `\n.frame${f + 1}\n  DB ${useDecimal ? wBytes : "&" + wBytes.toString(16).padStart(2, '0')}, ${useDecimal ? fh : "&" + fh.toString(16).padStart(2, '0')} ; Metadata (W bytes, H pixels)\n`;
         for (let y = 0; y < fh; y++) {
             let rb = []; for (let x = 0; x < fw; x += ppb) { let pns = []; for (let p = 0; p < ppb; p++) pns.push(px[y * totalW + (f * fw) + x + p] || 0); rb.push(packByte(pns)); }
-            res += `  DB ${rb.map(b => "&" + b.toString(16).toUpperCase().padStart(2, '0')).join(",")} ; Row ${y}\n`;
+            res += `  DB ${rb.map(b => useDecimal ? b : "&" + b.toString(16).toUpperCase().padStart(2, '0')).join(",")} ; Row ${y}\n`;
         }
     }
     const win = window.open(); win.document.write("<pre>" + res + "</pre>"); closeExport();
@@ -942,6 +952,12 @@ function doExport8BP() {
 
 function doExportABASC() {
     const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode==0?2:mode==1?4:8, bPR = Math.ceil(fw/ppb);
+    if (bPR % 2 !== 0) {
+        const pixRequeridos = ppb * 2;
+        alert(`ERROR DE EXPORTACIÓN ABASC:\n\nEl ancho actual de tu sprite ocupa ${bPR} bytes por fila.\nEl formato ABASC agrupa los datos en 'palabras' (words) de 2 bytes (16 bits), por lo que el ancho en bytes siempre debe ser un número PAR.\n\nEn el MODO ${mode} actual, esto significa que el ancho en píxeles debe ser MÚLTIPLO DE ${pixRequeridos}.\n\nPor favor, ajusta el ancho de tu sprite en la interfaz y vuelve a intentarlo.`);
+        closeExport();
+        return;
+    }
     let res = `' ABASC DATA\n' CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${fModes[mode].join(', ')}]\n`; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
     for (let f = 0; f < nf; f++) {
         res += `\nLABEL FRAME${f + 1}:\n    DATA &${fh.toString(16).padStart(2,'0')}${bPR.toString(16).padStart(2,'0')}\n`;
@@ -955,6 +971,7 @@ function doExportABASC() {
 }
 
 function doExportC() {
+    const useDecimal = document.getElementById('export-decimal-cb').checked;
     const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode==0?2:mode==1?4:8;
     let res = `// CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${fModes[mode].join(', ')}]\n`;
     res += "\n"; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
@@ -963,8 +980,8 @@ function doExportC() {
         res += `const unsigned char ${frameName}[] = {\n`;
         res += `    // Frame ${f + 1}\n`;
         for (let y = 0; y < fh; y++) {
-            let rb = []; for (let x = 0; x < fw; x += ppb) { let pns = []; for (let p = 0; p < ppb; p++) pns.push(px[y * totalW + (f * fw) + x + p] || 0); rb.push("0x" + packByte(pns).toString(16).toUpperCase().padStart(2, '0')); }
-            res += `    ${rb.join(", ")},\n`;
+            let rb = []; for (let x = 0; x < fw; x += ppb) { let pns = []; for (let p = 0; p < ppb; p++) pns.push(px[y * totalW + (f * fw) + x + p] || 0); rb.push(useDecimal ? packByte(pns) : "0x" + packByte(pns).toString(16).toUpperCase().padStart(2, '0')); }
+            res += `    ${rb.join(", ")}${y === fh - 1 ? "" : ","}\n`;
         }
         res += "};\n\n";
     }
