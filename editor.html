@@ -61,6 +61,32 @@
         #help-content li { margin-bottom: 8px; }
         #help-content .example { color: #f1c40f; font-style: italic; font-size: 11px; display: block; margin-top: 2px; }
         #help-content .hotkey-tag { background: #000; color: #fff; padding: 1px 4px; border: 1px solid #555; border-radius: 3px; font-family: monospace; font-size: 11px; }
+
+        #tabs-container { display: flex; background: #1a1a1a; padding: 5px 5px 0 5px; gap: 2px; flex-shrink: 0; align-items: flex-end; overflow-x: auto; }
+        #tabs-container .tab {
+            background: #333;
+            color: #aaa;
+            padding: 8px 15px;
+            cursor: pointer;
+            border: 1px solid #444;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 12px;
+            max-width: 150px;
+            flex-shrink: 0;
+        }
+        #tabs-container .tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #tabs-container .tab.active { background: #222; color: var(--cpc-cyan); font-weight: bold; }
+        #tabs-container .tab .close-tab { background: transparent; border: none; color: #888; cursor: pointer; font-size: 14px; padding: 0 2px; line-height: 1; }
+        #tabs-container .tab:hover .close-tab { color: #f00; }
+        #add-tab-btn {
+            background: #2ecc71; border: none; color: white; width: 28px; height: 28px;
+            font-size: 18px; cursor: pointer; font-weight: bold; border-radius: 4px 4px 0 0;
+            margin-left: 4px;
+        }
     </style>
 </head>
 <body>
@@ -72,6 +98,11 @@
     </h1>
     <div id="file-status">Archivo: <b>Ninguno</b> | Último acceso: <b>---</b></div>
 </header>
+
+<div id="tabs-container">
+    <!-- Tabs will be generated here by JS -->
+    <button id="add-tab-btn" title="New Sprite Tab">+</button>
+</div>
 
 <div class="main-container">
     <aside class="sidebar">
@@ -345,14 +376,33 @@
 </div>
 
 <script>
-let mode = 1, penLeft = 1, penMid = 0, penRight = 0, activeMouseButton = 0, drawing = false, drawingButton = 0, currentTool = 'pen', startCoords = null, previewPixels = [];
-let scale = 1, posX = 0, posY = 0, isPanning = false;
+let drawing = false, drawingButton = 0, startCoords = null, previewPixels = [], currentTool = 'pen';
 let animTimer = null, animSpeed = 500, animZoom = 8;
 let isAnimDragging = false, animOffset = [0, 0];
-let mirrorDir = 'H', previousNfValue = 1, currentHoveredFrame = 0, isShiftMode = false, lastMirrorTime = 0, lastRotateTime = 0;
-let undoStack = [], currentConfig = { fw: 16, fh: 16, nf: 1, mode: 1 };
+let mirrorDir = 'H', currentHoveredFrame = 0, isShiftMode = false, lastMirrorTime = 0, lastRotateTime = 0;
 let clipboardData = null;
 let currentPalIndexToEdit = -1;
+let isPanning = false;
+
+// --- Multi-tab State Management ---
+let spriteTabs = [];
+let activeTab = 0;
+
+const getActiveState = () => spriteTabs[activeTab];
+
+function createDefaultTabState(name = `Sprite ${spriteTabs.length + 1}`) {
+    return {
+        name: name,
+        config: { fw: 16, fh: 16, nf: 1, mode: 1 },
+        fModes: { 0: [1, 24, 20, 6, 26, 0, 2, 8, 10, 12, 14, 16, 18, 22, 25, 15], 1: [1, 24, 20, 6], 2: [1, 24] },
+        penLeft: 1, penMid: 0, penRight: 0, activeMouseButton: 0,
+        pixelData: null,
+        undoStack: [],
+        viewport: { scale: 1, posX: 0, posY: 0 },
+        checkboxes: { fullShift: false, transparentBg: false, hideGrid: false, spillText: false },
+        previousNfValue: 1
+    };
+}
 
 const cpcPal = ["#000000", "#000080", "#0000FF", "#800000", "#800080", "#8000FF", "#FF0000", "#FF0080", "#FF00FF", "#008000", "#008080", "#0080FF", "#808000", "#808080", "#8080FF", "#FF8000", "#FF8080", "#FF80FF", "#00FF00", "#00FF80", "#00FFFF", "#80FF00", "#80FF80", "#80FFFF", "#FFFF00", "#FFFF80", "#FFFFFF"];
 const cpcHardwareNames = ["Black", "Blue", "Bright Blue", "Red", "Magenta", "Mauve", "Bright Red", "Purple", "Bright Magenta", "Green", "Cyan", "Sky Blue", "Yellow", "White", "Pastel Blue", "Bright Orange", "Pink", "Pastel Magenta", "Bright Green", "Sea Green", "Bright Cyan", "Lime Green", "Pastel Green", "Pastel Cyan", "Bright Yellow", "Pastel Yellow", "Bright White"];
@@ -372,10 +422,11 @@ function showHardwareColors(editIndex = -1) {
     container.innerHTML = '';
     cpcPal.forEach((hex, i) => {
         const item = document.createElement('div');
-        item.className = 'hw-item';
+        item.className = 'hw-item'; 
+        const state = getActiveState();
         item.onclick = () => {
             if (currentPalIndexToEdit !== -1) {
-                fModes[mode][currentPalIndexToEdit] = i;
+                state.fModes[state.config.mode][currentPalIndexToEdit] = i;
                 refreshColors();
                 closeHardwareColors();
             }
@@ -388,8 +439,9 @@ function showHardwareColors(editIndex = -1) {
 
 function resetCurrentPalette() {
     if (!confirm("Restore default palette for current mode?")) return;
+    const state = getActiveState();
     const defaults = { 0: [1, 24, 20, 6, 26, 0, 2, 8, 10, 12, 14, 16, 18, 22, 25, 15], 1: [1, 24, 20, 6], 2: [1, 24] };
-    fModes[mode] = [...defaults[mode]];
+    state.fModes[state.config.mode] = [...defaults[state.config.mode]];
     refreshColors();
     closeHardwareColors();
 }
@@ -405,6 +457,7 @@ function closeCustomPaletteImport() {
 
 function processCustomPalette() {
     const text = document.getElementById('custom-palette-area').value;
+    const state = getActiveState();
     const regex = /(?:0x|&H|&)([0-9a-fA-F]+)|([0-9]+)/g;
     let matches;
     const newValues = [];
@@ -423,10 +476,10 @@ function processCustomPalette() {
         }
     }
     if (newValues.length === 0) { alert("No se encontraron valores válidos."); return; }
-    saveState();
-    for (let i = 0; i < Math.min(newValues.length, fModes[mode].length); i++) {
+    saveState(); // for undo
+    for (let i = 0; i < Math.min(newValues.length, state.fModes[state.config.mode].length); i++) {
         const val = newValues[i];
-        if (val >= 0 && val <= 26) fModes[mode][i] = val;
+        if (val >= 0 && val <= 26) state.fModes[state.config.mode][i] = val;
     }
     refreshColors();
     closeCustomPaletteImport();
@@ -448,7 +501,8 @@ function toggleGridLines() {
 }
 
 function fixMode0Width() {
-    if (mode !== 0) { alert("Esta función solo está disponible en MODE 0."); return; }
+    const state = getActiveState();
+    if (state.config.mode !== 0) { alert("Esta función solo está disponible en MODE 0."); return; }
     const fwInput = document.getElementById('fw');
     const oldFw = parseInt(fwInput.value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
     if (oldFw % 2 !== 0) { alert("El ancho debe ser par."); return; }
@@ -486,7 +540,7 @@ function processPastedImage(img) {
     const imgData = ctx.getImageData(0, 0, img.width, img.height).data;
     const palRGB = getColors().map(hex => ({ r: parseInt(hex.slice(1,3),16), g: parseInt(hex.slice(3,5),16), b: parseInt(hex.slice(5,7),16) }));
     const pxEls = document.querySelectorAll('.pixel'), colors = getColors(), ignoreInk0 = document.getElementById('transparent-bg-cb').checked;
-    const bgRGBA = `${imgData[0]},${imgData[1]},${imgData[2]},${imgData[3]}`;
+    const bgRGBA = `${imgData[0]},${imgData[1]},${imgData[2]},${imgData[3]}`; // Assuming top-left is bg
     let cF = 0;
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -513,26 +567,34 @@ function processPastedImage(img) {
 }
 
 function saveState() {
+    const state = getActiveState();
+    if (!state) return;
     const px = document.querySelectorAll('.pixel'); if (px.length === 0) return;
-    const d = { config: { fw: currentConfig.fw, fh: currentConfig.fh, nf: currentConfig.nf, mode: currentConfig.mode }, pixels: Array.from(px).map(p => parseInt(p.dataset.pen)) };
-    undoStack.push(d); if (undoStack.length > 50) undoStack.shift();
+    const d = { config: { ...state.config }, pixels: Array.from(px).map(p => parseInt(p.dataset.pen)) };
+    state.undoStack.push(d); if (state.undoStack.length > 50) state.undoStack.shift();
 }
 function undo() {
-    if (undoStack.length === 0) return;
-    const d = undoStack.pop();
+    const state = getActiveState();
+    if (!state || state.undoStack.length === 0) return;
+    const d = state.undoStack.pop();
     document.getElementById('fw').value = d.config.fw;
     document.getElementById('fh').value = d.config.fh;
     document.getElementById('nf').value = d.config.nf;
     document.getElementById('mode').value = d.config.mode;
+    state.config = d.config; // Restore config in state object
     updateByteInfo();
     initGrid(false);
     const px = document.querySelectorAll('.pixel'), colors = getColors();
     d.pixels.forEach((v, i) => { if(px[i]) { px[i].dataset.pen = v; px[i].style.background = colors[v]; } });
 }
 
-function getColors() { return fModes[mode].map(i => cpcPal[i]); }
+function getColors() { 
+    const state = getActiveState();
+    if (!state) return [];
+    return state.fModes[state.config.mode].map(i => cpcPal[i]); 
+}
 function updateByteInfo() {
-    mode = parseInt(document.getElementById('mode').value);
+    const mode = parseInt(document.getElementById('mode').value);
     const info = mode == 0 ? "1 byte = 2 pixels (160x200)" : mode == 1 ? "1 byte = 4 pixels (320x200)" : "1 byte = 8 pixels (640x200)";
     document.getElementById('byte-info').innerText = info;
 }
@@ -541,13 +603,14 @@ function updateFileStatus(name) {
     document.getElementById('file-status').innerHTML = `Archivo: <b>${name}</b> | Último acceso: <b>${timeStr}</b>`;
 }
 
-function initGrid(conf) {
+function initGrid(conf, pixelDataToRestore = null) {
     if(conf && !confirm("Wipe canvas?")) return;
     if(conf) saveState();
     closeAnim();
-    mode = parseInt(document.getElementById('mode').value);
+    const state = getActiveState();
+    const mode = parseInt(document.getElementById('mode').value);
     const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
-    currentConfig = { fw, fh, nf, mode };
+    state.config = { fw, fh, nf, mode };
     const totalW = fw * nf, g = document.getElementById('grid');
     g.innerHTML = ''; g.className = `grid m${mode}`;
     g.oncontextmenu = (e) => e.preventDefault();
@@ -561,7 +624,7 @@ function initGrid(conf) {
                 if (e.button === 1) e.stopPropagation();
                 previewPixels.forEach(pp => { pp.classList.remove('preview'); pp.classList.remove('select-preview'); });
                 previewPixels = [];
-                let targetPen = e.button === 0 ? penLeft : (e.button === 1 ? penMid : penRight);
+                let targetPen = e.button === 0 ? state.penLeft : (e.button === 1 ? state.penMid : state.penRight);
                 if (currentTool === 'fill') floodFill(i % totalW, Math.floor(i / totalW), targetPen, parseInt(p.dataset.pen));
                 else if (currentTool === 'text') handleTextTool(i % totalW, Math.floor(i / totalW), targetPen);
                 else { 
@@ -569,7 +632,7 @@ function initGrid(conf) {
                     drawing = true; 
                     drawingButton = e.button;
                     startCoords = {x: i % totalW, y: Math.floor(i / totalW)}; 
-                    if(currentTool==='pen') paint(p, targetPen); 
+                    if(currentTool === 'pen') paint(p, targetPen); 
                 }
             } 
         };
@@ -577,8 +640,8 @@ function initGrid(conf) {
             currentHoveredFrame = Math.floor((i % totalW) / fw) + 1;
             document.getElementById('current-frame-info').innerText = `Current Frame: ${currentHoveredFrame}`;
             if(drawing) { 
-                let targetPen = drawingButton === 0 ? penLeft : (drawingButton === 1 ? penMid : penRight);
-                if(currentTool==='pen') paint(p, targetPen); 
+                let targetPen = drawingButton === 0 ? state.penLeft : (drawingButton === 1 ? state.penMid : state.penRight);
+                if(currentTool === 'pen') paint(p, targetPen); 
                 else updatePreview(i % totalW, Math.floor(i / totalW)); 
             } 
         };
@@ -590,32 +653,37 @@ function initGrid(conf) {
         const guide = document.createElement('div'); guide.className = 'f-guide'; guide.style.left = (i * fw * mult) + "px";
         const lbl = document.createElement('div'); lbl.className = 'f-label'; lbl.innerText = `FRAME ${i + 1}`; guide.appendChild(lbl); g.appendChild(guide);
     }
+    if (pixelDataToRestore) {
+        restoreData(pixelDataToRestore);
+    }
     buildPal();
 }
 
 function buildPal() {
+    const state = getActiveState();
+    if (!state) return;
     const b = document.getElementById('pal'); b.innerHTML = '';
     getColors().forEach((c, i) => {
-        const isSel = (activeMouseButton === 0 && penLeft === i) || 
-                      (activeMouseButton === 1 && penMid === i) || 
-                      (activeMouseButton === 2 && penRight === i);
+        const isSel = (state.activeMouseButton === 0 && state.penLeft === i) || 
+                      (state.activeMouseButton === 1 && state.penMid === i) || 
+                      (state.activeMouseButton === 2 && state.penRight === i);
         const d = document.createElement('div'); d.className = 'c-box' + (isSel ? ' sel' : ''); d.style.background = c;
         d.onclick = () => { 
-            if (activeMouseButton === 0) penLeft = i;
-            else if (activeMouseButton === 1) penMid = i;
-            else if (activeMouseButton === 2) penRight = i;
+            if (state.activeMouseButton === 0) state.penLeft = i;
+            else if (state.activeMouseButton === 1) state.penMid = i;
+            else if (state.activeMouseButton === 2) state.penRight = i;
             buildPal(); 
         };
         d.oncontextmenu = (e) => { e.preventDefault(); showHardwareColors(i); };
         b.appendChild(d);
     });
     const colors = getColors();
-    document.getElementById('c-box-left').style.background = colors[penLeft];
-    document.getElementById('c-box-mid').style.background = colors[penMid];
-    document.getElementById('c-box-right').style.background = colors[penRight];
-    document.getElementById('c-box-left').className = 'c-box' + (activeMouseButton === 0 ? ' sel' : '');
-    document.getElementById('c-box-mid').className = 'c-box' + (activeMouseButton === 1 ? ' sel' : '');
-    document.getElementById('c-box-right').className = 'c-box' + (activeMouseButton === 2 ? ' sel' : '');
+    document.getElementById('c-box-left').style.background = colors[state.penLeft];
+    document.getElementById('c-box-mid').style.background = colors[state.penMid];
+    document.getElementById('c-box-right').style.background = colors[state.penRight];
+    document.getElementById('c-box-left').className = 'c-box' + (state.activeMouseButton === 0 ? ' sel' : '');
+    document.getElementById('c-box-mid').className = 'c-box' + (state.activeMouseButton === 1 ? ' sel' : '');
+    document.getElementById('c-box-right').className = 'c-box' + (state.activeMouseButton === 2 ? ' sel' : '');
 }
 
 function setTool(t) { 
@@ -749,7 +817,7 @@ function drawTextOnGrid(text, fontSize, startX, startY, spill, targetPen) {
 
     if (pixelsDrawn === 0) {
         alert("Todo el texto ha quedado fuera de los límites del sprite.\nPor favor, intenta de nuevo ajustando el tamaño de la fuente o haciendo clic en otra posición.");
-        undoStack.pop(); // Eliminamos el punto de guardado vacío
+        getActiveState().undoStack.pop(); // Eliminamos el punto de guardado vacío
     }
 }
 
@@ -834,7 +902,7 @@ function rotateDirect(f) {
 }
 
 function toggleShiftMode() { isShiftMode = !isShiftMode; document.getElementById('shift-mode-indicator').style.display = isShiftMode ? 'block' : 'none'; document.getElementById('btn-shift-mode').classList.toggle('active', isShiftMode); }
-function shiftFrameDirect(f, dir) {
+function shiftFrameDirect(f, dir) { 
     saveState(); const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value);
     let d = getFullData(), sX = f * fw;
     if (dir === 'L' || dir === 'R') for (let y = 0; y < fh; y++) { let chunk = d[y].slice(sX, sX + fw); if (dir === 'L') { chunk.shift(); chunk.push(0); } else { chunk.pop(); chunk.unshift(0); } d[y].splice(sX, fw, ...chunk); }
@@ -852,6 +920,7 @@ function shiftAllDirect(dir) {
 }
 
 function packByte(p) {
+    const mode = getActiveState().config.mode;
     let b=0; if(mode==1){ if(p[0]&1)b|=128;if(p[0]&2)b|=8;if(p[1]&1)b|=64;if(p[1]&2)b|=4;if(p[2]&1)b|=32;if(p[2]&2)b|=2;if(p[3]&1)b|=16;if(p[3]&2)b|=1; }
     else if(mode==0){ if(p[0]&1)b|=128;if(p[0]&2)b|=8;if(p[0]&4)b|=32;if(p[0]&8)b|=2;if(p[1]&1)b|=64;if(p[1]&2)b|=4;if(p[1]&4)b|=16;if(p[1]&8)b|=1; }
     else { for(let i=0;i<8;i++)if(p[i]&1)b|=(1<<(7-i)); } return b;
@@ -862,6 +931,7 @@ function closeImport() { document.getElementById('import-overlay').style.display
 
 function processImport() {
     const text = document.getElementById('import-area').value;
+    const state = getActiveState();
     if (text.includes('{')) {
         let content = text.substring(text.indexOf('{') + 1, text.lastIndexOf('}'));
         let bytes = (content.match(/0x[0-9a-fA-F]+|[0-9]+/g) || []).map(v => v.startsWith('0x') ? parseInt(v, 16) : parseInt(v, 10));
@@ -934,6 +1004,7 @@ function processImport() {
 }
 
 function applyImportedFrames(fF, oT) {
+    const mode = getActiveState().config.mode;
     const isWordMode = fF.some(f => f.isWordMode || f.data.some(v => v > 255));
     fF.forEach((f, i) => {
         if (f.wBytes === 0 && f.h === 0 && f.data.length >= 2) { f.wBytes = f.data.shift(); f.h = f.data.shift(); }
@@ -965,6 +1036,7 @@ function applyImportedFrames(fF, oT) {
 }
 
 function unpackByte(b) {
+    const mode = getActiveState().config.mode;
     let p = new Array(8).fill(0);
     if (mode == 1) {
         if (b & 128) p[0] |= 1; if (b & 8) p[0] |= 2; if (b & 64) p[1] |= 1; if (b & 4) p[1] |= 2;
@@ -977,10 +1049,12 @@ function unpackByte(b) {
 }
 
 function doExport8BP() {
+    const state = getActiveState();
     const useDecimal = document.getElementById('export-decimal-cb').checked;
-    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode == 0 ? 2 : mode == 1 ? 4 : 8, wBytes = Math.ceil(fw / ppb);
+    const {fw, fh, nf, mode} = state.config;
+    const totalW = fw * nf, ppb = mode == 0 ? 2 : mode == 1 ? 4 : 8, wBytes = Math.ceil(fw / ppb);
     const px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen)); 
-    let res = `; 8BP ASM Export\n; CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${fModes[mode].join(', ')}]\n`;
+    let res = `; 8BP ASM Export\n; CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${state.fModes[mode].join(', ')}]\n`;
     for (let f = 0; f < nf; f++) {
         res += `\n.frame${f + 1}\n  DB ${useDecimal ? wBytes : "&" + wBytes.toString(16).padStart(2, '0')}, ${useDecimal ? fh : "&" + fh.toString(16).padStart(2, '0')} ; Metadata (W bytes, H pixels)\n`;
         for (let y = 0; y < fh; y++) {
@@ -992,14 +1066,16 @@ function doExport8BP() {
 }
 
 function doExportABASC() {
-    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode==0?2:mode==1?4:8, bPR = Math.ceil(fw/ppb);
+    const state = getActiveState();
+    const {fw, fh, nf, mode} = state.config;
+    const totalW = fw * nf, ppb = mode==0?2:mode==1?4:8, bPR = Math.ceil(fw/ppb);
     if (bPR % 2 !== 0) {
         const pixRequeridos = ppb * 2;
         alert(`ERROR DE EXPORTACIÓN ABASC:\n\nEl ancho actual de tu sprite ocupa ${bPR} bytes por fila.\nEl formato ABASC agrupa los datos en 'palabras' (words) de 2 bytes (16 bits), por lo que el ancho en bytes siempre debe ser un número PAR.\n\nEn el MODO ${mode} actual, esto significa que el ancho en píxeles debe ser MÚLTIPLO DE ${pixRequeridos}.\n\nPor favor, ajusta el ancho de tu sprite en la interfaz y vuelve a intentarlo.`);
         closeExport();
         return;
     }
-    let res = `' ABASC DATA\n' CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${fModes[mode].join(', ')}]\n`; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
+    let res = `' ABASC DATA\n' CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${state.fModes[mode].join(', ')}]\n`; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
     for (let f = 0; f < nf; f++) {
         res += `\nLABEL FRAME${f + 1}:\n    DATA &${fh.toString(16).padStart(2,'0')}${bPR.toString(16).padStart(2,'0')}\n`;
         for (let y = 0; y < fh; y++) {
@@ -1012,9 +1088,11 @@ function doExportABASC() {
 }
 
 function doExportC() {
+    const state = getActiveState();
     const useDecimal = document.getElementById('export-decimal-cb').checked;
-    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode==0?2:mode==1?4:8;
-    let res = `// CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${fModes[mode].join(', ')}]\n`;
+    const {fw, fh, nf, mode} = state.config;
+    const totalW = fw * nf, ppb = mode==0?2:mode==1?4:8;
+    let res = `// CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${state.fModes[mode].join(', ')}]\n`;
     res += "\n"; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
     for (let f = 0; f < nf; f++) {
         let frameName = "sprite_data" + f.toString().padStart(2, '0');
@@ -1030,7 +1108,8 @@ function doExportC() {
 }
 
 function getBin(anim = false) {
-    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf, ppb = mode==0?2:mode==1?4:8;
+    const {fw, fh, nf, mode} = getActiveState().config;
+    const totalW = fw * nf, ppb = mode==0?2:mode==1?4:8;
     let off = 0, wB = Math.ceil(fw/ppb), tB = Math.ceil(totalW/ppb);
     const actualSize = anim ? (wB * fh * nf) : 16384;
     const buf = new Uint8Array(Math.max(16384, actualSize)), px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
@@ -1041,7 +1120,7 @@ function getBin(anim = false) {
 }
 function exportBinary() { let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([getBin(false)])); a.download = "screen.bin"; a.click(); closeExport(); }
 function exportDSK() { 
-    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
+    const {fw, fh, nf, mode} = getActiveState().config;
     const ppb = mode==0?2:mode==1?4:8;
     const wBytes = Math.ceil(fw / ppb);
     const totalSize = wBytes * fh * (nf + 1); // frames reales + frame fantasma
@@ -1052,38 +1131,131 @@ function exportDSK() {
 }
 function closeDSKMenu() { document.getElementById('dsk-export-overlay').style.display = 'none'; }
 function doExportDSK(anim) { 
-    const nf = parseInt(document.getElementById('nf').value), fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value); 
+    const {fw, fh, nf, mode} = getActiveState().config;
     const buf = generateCPCDisk(getBin(anim), mode, anim, fw, fh, nf, animSpeed); 
     let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf])); a.download = "juego.dsk"; a.click(); closeDSKMenu(); 
 }
 function showExportMenu(){ document.getElementById('export-overlay').style['display']='flex'; }
 function closeExport(){ document.getElementById('export-overlay').style['display']='none'; }
-function confirmNewProject() { document.getElementById('new-project-overlay').style.display = 'none'; saveState(); previousNfValue = document.getElementById('nf').value; initGrid(false); }
-function cancelNewProject() { document.getElementById('new-project-overlay').style.display = 'none'; document.getElementById('nf').value = previousNfValue; }
+function confirmNewProject() { 
+    document.getElementById('new-project-overlay').style.display = 'none'; 
+    saveState(); 
+    getActiveState().previousNfValue = document.getElementById('nf').value; 
+    initGrid(false); 
+}
+function cancelNewProject() { 
+    document.getElementById('new-project-overlay').style.display = 'none'; 
+    document.getElementById('nf').value = getActiveState().previousNfValue; 
+}
 
 function startNewProject(force = false) {
     if (!force && !confirm("¿Empezar un proyecto nuevo? Perderás todos los cambios no guardados.")) return;
-    document.getElementById('mode').value = 0;
-    document.getElementById('fw').value = 16;
-    document.getElementById('fh').value = 32;
-    document.getElementById('nf').value = 3;
-    undoStack = [];
+    spriteTabs = [createDefaultTabState()];
+    activeTab = 0;
     updateFileStatus("Ninguno");
-    updateByteInfo();
-    penLeft = 1; penMid = 0; penRight = 0; activeMouseButton = 0;
-    initGrid(false);
+    loadStateToUI();
+    buildTabsUI();
+}
+
+// --- Tab Management UI and Logic ---
+function buildTabsUI() {
+    const container = document.getElementById('tabs-container');
+    while (container.firstChild && container.firstChild.id !== 'add-tab-btn') {
+        container.removeChild(container.firstChild);
+    }
+    spriteTabs.forEach((tab, index) => {
+        const tabEl = document.createElement('div');
+        tabEl.className = 'tab' + (index === activeTab ? ' active' : '');
+        tabEl.dataset.index = index;
+        tabEl.onclick = () => switchTab(index);
+        const nameSpan = document.createElement('span');
+        nameSpan.innerText = tab.name;
+        nameSpan.title = tab.name;
+        nameSpan.ondblclick = (e) => {
+            e.stopPropagation();
+            const newName = prompt('Enter new sprite name:', tab.name);
+            if (newName) { getActiveState().name = newName; buildTabsUI(); }
+        };
+        tabEl.appendChild(nameSpan);
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'close-tab';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.onclick = (e) => { e.stopPropagation(); removeTab(index); };
+        tabEl.appendChild(closeBtn);
+        container.insertBefore(tabEl, document.getElementById('add-tab-btn'));
+    });
+}
+
+function addTab() {
+    saveCurrentUIToState();
+    spriteTabs.push(createDefaultTabState());
+    switchTab(spriteTabs.length - 1);
+}
+
+function removeTab(index) {
+    if (spriteTabs.length <= 1) {
+        if (confirm("This is the last sprite. Clear and start over?")) startNewProject(true);
+        return;
+    }
+    if (!confirm(`Delete sprite "${spriteTabs[index].name}"?`)) return;
+    spriteTabs.splice(index, 1);
+    let newActiveIndex = activeTab;
+    if (activeTab === index) newActiveIndex = Math.max(0, index - 1);
+    else if (activeTab > index) newActiveIndex = activeTab - 1;
+    activeTab = newActiveIndex; // Set it before switchTab
+    loadStateToUI();
+    buildTabsUI();
+}
+
+function switchTab(index) {
+    if (index === activeTab) return;
+    saveCurrentUIToState();
+    activeTab = index;
+    loadStateToUI();
+    buildTabsUI();
+}
+
+function saveCurrentUIToState() {
+    if (!getActiveState()) return;
+    const state = getActiveState();
+    state.config.fw = parseInt(document.getElementById('fw').value); state.config.fh = parseInt(document.getElementById('fh').value); state.config.nf = parseInt(document.getElementById('nf').value); state.config.mode = parseInt(document.getElementById('mode').value);
+    state.checkboxes = { fullShift: document.getElementById('full-shift-cb').checked, transparentBg: document.getElementById('transparent-bg-cb').checked, hideGrid: document.getElementById('hide-grid-cb').checked, spillText: document.getElementById('spill-text-cb').checked };
+    state.pixelData = getFullData();
+}
+
+function loadStateToUI() {
+    const state = getActiveState();
+    document.getElementById('fw').value = state.config.fw; document.getElementById('fh').value = state.config.fh; document.getElementById('nf').value = state.config.nf; document.getElementById('mode').value = state.config.mode;
+    document.getElementById('full-shift-cb').checked = state.checkboxes.fullShift; document.getElementById('transparent-bg-cb').checked = state.checkboxes.transparentBg; document.getElementById('hide-grid-cb').checked = state.checkboxes.hideGrid; document.getElementById('spill-text-cb').checked = state.checkboxes.spillText;
+    const { scale, posX, posY } = state.viewport;
+    pn.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
+    initGrid(false, state.pixelData);
 }
 
 const vp = document.getElementById('viewport'), pn = document.getElementById('canvas-panner');
-vp.onwheel = (e) => { e.preventDefault(); scale = Math.min(Math.max(0.05, scale * (e.deltaY > 0 ? 0.9 : 1.1)), 20); pn.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; };
+vp.onwheel = (e) => { 
+    e.preventDefault(); 
+    const state = getActiveState();
+    state.viewport.scale = Math.min(Math.max(0.05, state.viewport.scale * (e.deltaY > 0 ? 0.9 : 1.1)), 20); 
+    pn.style.transform = `translate(${state.viewport.posX}px, ${state.viewport.posY}px) scale(${state.viewport.scale})`; 
+};
 vp.onmousedown = (e) => { if(e.button === 1) { isPanning = true; vp.style.cursor = 'grabbing'; e.preventDefault(); } };
 const animWin = document.getElementById('anim-window'), handle = document.getElementById('win-handle');
 handle.onmousedown = (e) => { isAnimDragging = true; animOffset = [animWin.offsetLeft - e.clientX, animWin.offsetTop - e.clientY]; e.preventDefault(); };
-window.onmousemove = (e) => { if(isPanning) { posX += e.movementX; posY += e.movementY; pn.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; } if(isAnimDragging) { animWin.style.left = (e.clientX + animOffset[0]) + 'px'; animWin.style.top = (e.clientY + animOffset[1]) + 'px'; } };
+window.onmousemove = (e) => { 
+    if(isPanning) { 
+        const state = getActiveState();
+        state.viewport.posX += e.movementX; 
+        state.viewport.posY += e.movementY; 
+        pn.style.transform = `translate(${state.viewport.posX}px, ${state.viewport.posY}px) scale(${state.viewport.scale})`; 
+    } 
+    if(isAnimDragging) { animWin.style.left = (e.clientX + animOffset[0]) + 'px'; animWin.style.top = (e.clientY + animOffset[1]) + 'px'; } 
+};
 window.onmouseup = () => { 
+    const state = getActiveState();
     if(drawing && currentTool !== 'pen'){ 
         if (currentTool !== 'select') { 
-            let targetPen = drawingButton === 0 ? penLeft : (drawingButton === 1 ? penMid : penRight);
+            let targetPen = drawingButton === 0 ? state.penLeft : (drawingButton === 1 ? state.penMid : state.penRight);
             previewPixels.forEach(p => { paint(p, targetPen); p.classList.remove('preview'); }); 
             previewPixels=[]; 
         }
@@ -1093,13 +1265,15 @@ window.onmouseup = () => {
 
 animWin.onwheel = (e) => { 
     e.preventDefault(); if (e.deltaY > 0) animZoom = Math.max(2, animZoom - 1); else animZoom = Math.min(40, animZoom + 1); 
-    let cv = document.getElementById('canvas'); const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), asp = (mode == 0) ? 2 : 1;
+    const {fw, fh, mode} = getActiveState().config;
+    let cv = document.getElementById('canvas'); const asp = (mode == 0) ? 2 : 1;
     cv.style.width = (fw * animZoom * asp) + "px"; cv.style.height = (fh * animZoom) + "px"; 
 };
 
 function playAnim() {
-    const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value);
-    const cv = document.getElementById('canvas'), ctx = cv.getContext('2d'), asp = (mode == 0) ? 2 : 1;
+    const {fw, fh, nf, mode} = getActiveState().config;
+    const cv = document.getElementById('canvas'), ctx = cv.getContext('2d');
+    const asp = (mode == 0) ? 2 : 1;
     cv.width = fw; cv.height = fh; cv.style.width = (fw * animZoom * asp) + "px"; cv.style.height = (fh * animZoom) + "px";
     animWin.style.display = 'block'; let f = 0; if(animTimer) clearInterval(animTimer);
     animTimer = setInterval(() => { const px = document.querySelectorAll('.pixel'); ctx.clearRect(0,0,fw,fh); for(let y=0; y<fh; y++) for(let x=0; x<fw; x++) { const p = px[y * (fw*nf) + (f*fw + x)]; if(p){ ctx.fillStyle = p.style.background; ctx.fillRect(x,y,1,1); } } f = (f+1)%nf; document.getElementById('anim-status').innerText = `Frame: ${f==0?nf:f}/${nf} | ${animSpeed}ms`; }, animSpeed);
@@ -1107,6 +1281,7 @@ function playAnim() {
 function closeAnim() { if(animTimer) clearInterval(animTimer); animWin.style.display = 'none'; }
 
 window.onkeydown = (e) => { 
+    const state = getActiveState();
     const kP = e.key.toLowerCase(); 
     if ((e.ctrlKey || e.metaKey) && kP === 'z') { e.preventDefault(); undo(); return; }
     if ((e.ctrlKey || e.metaKey) && kP === 'c') { e.preventDefault(); copySelection(); return; }
@@ -1124,7 +1299,7 @@ window.onkeydown = (e) => {
                 e.preventDefault();
                 saveState();
                 const colors = getColors();
-                previewPixels.forEach(p => { p.dataset.pen = penLeft; p.style.background = colors[penLeft]; });
+                previewPixels.forEach(p => { p.dataset.pen = state.penLeft; p.style.background = colors[state.penLeft]; });
                 return;
             }
         }
@@ -1140,23 +1315,49 @@ window.onkeydown = (e) => {
     if(animWin.style.display === 'block') { if(kP === '+' || kP === '=') { animSpeed = Math.max(50, animSpeed - 50); playAnim(); } if(kP === '-' || kP === '_') { animSpeed = Math.min(2000, animSpeed + 50); playAnim(); } } 
 };
 
-function saveProject() { const n = "sprite.json"; const d = { config: { fw: parseInt(document.getElementById('fw').value), fh: parseInt(document.getElementById('fh').value), nf: parseInt(document.getElementById('nf').value), mode, fModes }, pixels: Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen)) }; let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], {type: 'application/json'})); a.download = n; a.click(); updateFileStatus(n); }
+function saveProject() { 
+    saveCurrentUIToState(); // Ensure current tab's data is saved
+    const n = "sprites.json"; 
+    let a = document.createElement('a'); 
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(spriteTabs)], {type: 'application/json'})); 
+    a.download = n; a.click(); updateFileStatus(n); 
+}
 function triggerLoad() { const i = document.getElementById('load-input'); i.value = null; i.click(); }
 function loadProject(i) { 
     if (!i.files[0]) return; const f = i.files[0]; if (!confirm(`¿Cargar "${f.name}"?`)) return;
-    saveState(); closeAnim(); const r = new FileReader(); r.onload = (e) => { 
-        try { const d = JSON.parse(e.target.result); document.getElementById('fw').value = d.config.fw; document.getElementById('fh').value = d.config.fh; document.getElementById('nf').value = d.config.nf; document.getElementById('mode').value = d.config.mode; if(d.config.fModes) fModes = d.config.fModes; initGrid(false); const px = document.querySelectorAll('.pixel'), colors = getColors(); d.pixels.forEach((v, i) => { if(px[i]) { px[i].dataset.pen = v; px[i].style.background = colors[v]; } }); updateFileStatus(f.name); updateByteInfo(); } catch (err) { alert("Error."); }
+    closeAnim(); const r = new FileReader(); r.onload = (e) => { 
+        try { 
+            const d = JSON.parse(e.target.result);
+            saveCurrentUIToState();
+            let newActiveIndex = spriteTabs.length;
+            if (Array.isArray(d)) { // New multi-tab format
+                spriteTabs.push(...d);
+                activeTab = newActiveIndex;
+            } else { // Old single-sprite format
+                const newState = createDefaultTabState(f.name.replace('.json', ''));
+                newState.config = d.config;
+                if (d.config.fModes) newState.fModes = d.config.fModes;
+                const { fw, fh, nf } = d.config; const totalW = fw * nf; const pixels1D = d.pixels; const pixels2D = [];
+                for (let y = 0; y < fh; y++) { pixels2D.push(pixels1D.slice(y * totalW, (y + 1) * totalW)); }
+                newState.pixelData = pixels2D;
+                spriteTabs.push(newState); 
+                activeTab = newActiveIndex;
+            }
+            loadStateToUI(); buildTabsUI();
+            updateFileStatus(f.name);
+        } catch (err) { alert("Error loading file. It might be corrupted or in an old format."); console.error(err); }
     }; r.readAsText(f); 
 }
 
 document.addEventListener("DOMContentLoaded", () => { 
     startNewProject(true); document.querySelectorAll('.toolbar input:not(#full-shift-cb, #hide-grid-cb, #transparent-bg-cb, #spill-text-cb)').forEach(i => {
-        if (i.id === 'nf') { i.onfocus = () => { previousNfValue = i.value; }; i.onchange = () => { document.getElementById('new-project-msg').innerText = `¿Cambiar a ${i.value} frames? Esto BORRARÁ el lienzo actual.`; document.getElementById('new-project-overlay').style.display = 'flex'; };
+        if (i.id === 'nf') { i.onfocus = () => { getActiveState().previousNfValue = i.value; }; i.onchange = () => { document.getElementById('new-project-msg').innerText = `¿Cambiar a ${i.value} frames? Esto BORRARÁ el lienzo actual.`; document.getElementById('new-project-overlay').style.display = 'flex'; };
         } else i.onchange = () => initGrid(true);
     }); 
-    document.getElementById('c-box-left').onclick = () => { activeMouseButton = 0; buildPal(); };
-    document.getElementById('c-box-mid').onclick = () => { activeMouseButton = 1; buildPal(); };
-    document.getElementById('c-box-right').onclick = () => { activeMouseButton = 2; buildPal(); };
+    document.getElementById('c-box-left').onclick = () => { getActiveState().activeMouseButton = 0; buildPal(); };
+    document.getElementById('c-box-mid').onclick = () => { getActiveState().activeMouseButton = 1; buildPal(); };
+    document.getElementById('c-box-right').onclick = () => { getActiveState().activeMouseButton = 2; buildPal(); };
+    document.getElementById('add-tab-btn').onclick = addTab;
 });
 </script>
 </body>
