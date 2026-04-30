@@ -94,7 +94,7 @@
 <header>
     <h1 style="margin:0; display:flex; align-items:baseline; gap:10px;">
         CPC SPRITE STUDIO
-        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 29/04/2026 23:08]</span>
+        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 30/04/2026 23:32:30]</span>
     </h1>
     <div id="file-status">Archivo: <b>Ninguno</b> | Último acceso: <b>---</b></div>
 </header>
@@ -941,6 +941,7 @@ function processImport() {
         let wB = parseInt(wI), h = parseInt(hI), fS = wB * h, nF = Math.floor(bytes.length / fS);
         saveState(); closeAnim();
         let fF = []; for (let f=0; f<nF; f++) fF.push({ label: "C_ARRAY_"+(f+1), wBytes: wB, h: h, data: bytes.slice(f*fS, (f+1)*fS) });
+        if (!isCurrentTabEmpty()) addTab();
         applyImportedFrames(fF, text); return;
     }
     const lines = text.split('\n'); 
@@ -1000,7 +1001,7 @@ function processImport() {
     });
     if (report) alert("REPORTE DE IMPORTACIÓN:\n\n" + report);
     if (fF.length === 0) { alert("No hay datos."); return; }
-    saveState(); closeAnim(); applyImportedFrames(fF, text);
+    saveState(); closeAnim(); if (!isCurrentTabEmpty()) addTab(); applyImportedFrames(fF, text);
 }
 
 function applyImportedFrames(fF, oT) {
@@ -1011,6 +1012,12 @@ function applyImportedFrames(fF, oT) {
     });
     const first = fF[0], ppb = (mode == 0 ? 2 : (mode == 1 ? 4 : 8)), newFw = first.wBytes * ppb, newFh = first.h, newNf = fF.length;
     document.getElementById('nf').value = newNf; document.getElementById('fw').value = newFw; document.getElementById('fh').value = newFh;
+
+    if (first.label) {
+        getActiveState().name = first.label.toUpperCase();
+        buildTabsUI();
+    }
+
     initGrid(false); 
     const px = document.querySelectorAll('.pixel'), totalW = newFw * newNf, colors = getColors();
     fF.forEach((f, fI) => {
@@ -1118,7 +1125,23 @@ function getBin(anim = false) {
     else { for (let y=0; y<Math.min(fh, 200); y++) { let addr = (Math.floor(y/8)*80) + ((y%8)*2048); for (let b=0; b<Math.min(tB, 80); b++) { let pns = []; for (let p=0; p<ppb; p++) pns.push(px[y*totalW + (b*ppb) + p] || 0); if (addr+b < 16384) buf[addr+b] = packByte(pns); } } }
     return buf;
 }
-function exportBinary() { let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([getBin(false)])); a.download = "screen.bin"; a.click(); closeExport(); }
+
+function triggerDownload(blob, filename) {
+    if (document.activeElement) document.activeElement.blur();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { 
+        if (document.body.contains(a)) document.body.removeChild(a); 
+        URL.revokeObjectURL(url); 
+    }, 100);
+}
+
+function exportBinary() { triggerDownload(new Blob([getBin(false)]), "screen.bin"); closeExport(); }
 function exportDSK() { 
     const {fw, fh, nf, mode} = getActiveState().config;
     const ppb = mode==0?2:mode==1?4:8;
@@ -1133,7 +1156,7 @@ function closeDSKMenu() { document.getElementById('dsk-export-overlay').style.di
 function doExportDSK(anim) { 
     const {fw, fh, nf, mode} = getActiveState().config;
     const buf = generateCPCDisk(getBin(anim), mode, anim, fw, fh, nf, animSpeed); 
-    let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf])); a.download = "juego.dsk"; a.click(); closeDSKMenu(); 
+    triggerDownload(new Blob([buf]), "juego.dsk"); closeDSKMenu(); 
 }
 function showExportMenu(){ document.getElementById('export-overlay').style['display']='flex'; }
 function closeExport(){ document.getElementById('export-overlay').style['display']='none'; }
@@ -1215,6 +1238,15 @@ function switchTab(index) {
     buildTabsUI();
 }
 
+function isCurrentTabEmpty() {
+    const px = document.querySelectorAll('.pixel');
+    if (px.length === 0) return true;
+    for (let i = 0; i < px.length; i++) {
+        if (parseInt(px[i].dataset.pen) !== 0) return false;
+    }
+    return true;
+}
+
 function saveCurrentUIToState() {
     if (!getActiveState()) return;
     const state = getActiveState();
@@ -1292,6 +1324,7 @@ window.onkeydown = (e) => {
             pasteSelection(); 
             return; 
         }
+            return;
     }
 
         if (kP === 'delete') {
@@ -1309,18 +1342,19 @@ window.onkeydown = (e) => {
         if (isShiftMode && currentHoveredFrame > 0) shiftFrameDirect(currentHoveredFrame-1, dir);
         else if (document.getElementById('full-shift-cb').checked) shiftAllDirect(dir);
     }
-    if ((kP === 'h' || kP === 'v') && currentHoveredFrame > 0 && Date.now() - lastMirrorTime >= 1000) { if (kP === 'h') flipHDirect(currentHoveredFrame - 1); else flipVDirect(currentHoveredFrame - 1); lastMirrorTime = Date.now(); }
-    if (kP === 'q' && currentHoveredFrame > 0 && Date.now() - lastRotateTime >= 1000) { rotateDirect(currentHoveredFrame - 1); lastRotateTime = Date.now(); }
-    if(kP === 'p') setTool('pen'); if(kP === '/') setTool('line'); if(kP === 'r') setTool('box'); if(kP === 'c') setTool('circle'); if(kP === 's') setTool('select'); if(kP === 'g') setTool('fill'); if(kP === 't') setTool('text'); if(kP === 'escape') closeAnim(); 
+    if (!e.ctrlKey && !e.metaKey) {
+        if ((kP === 'h' || kP === 'v') && currentHoveredFrame > 0 && Date.now() - lastMirrorTime >= 1000) { if (kP === 'h') flipHDirect(currentHoveredFrame - 1); else flipVDirect(currentHoveredFrame - 1); lastMirrorTime = Date.now(); }
+        if (kP === 'q' && currentHoveredFrame > 0 && Date.now() - lastRotateTime >= 1000) { rotateDirect(currentHoveredFrame - 1); lastRotateTime = Date.now(); }
+        if(kP === 'p') setTool('pen'); if(kP === '/') setTool('line'); if(kP === 'r') setTool('box'); if(kP === 'c') setTool('circle'); if(kP === 's') setTool('select'); if(kP === 'g') setTool('fill'); if(kP === 't') setTool('text'); if(kP === 'escape') closeAnim(); 
+    }
     if(animWin.style.display === 'block') { if(kP === '+' || kP === '=') { animSpeed = Math.max(50, animSpeed - 50); playAnim(); } if(kP === '-' || kP === '_') { animSpeed = Math.min(2000, animSpeed + 50); playAnim(); } } 
 };
 
 function saveProject() { 
     saveCurrentUIToState(); // Ensure current tab's data is saved
     const n = "sprites.json"; 
-    let a = document.createElement('a'); 
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(spriteTabs)], {type: 'application/json'})); 
-    a.download = n; a.click(); updateFileStatus(n); 
+    triggerDownload(new Blob([JSON.stringify(spriteTabs)], {type: 'application/json'}), n); 
+    updateFileStatus(n); 
 }
 function triggerLoad() { const i = document.getElementById('load-input'); i.value = null; i.click(); }
 function loadProject(i) { 
