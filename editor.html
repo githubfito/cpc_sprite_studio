@@ -151,7 +151,23 @@
                 <div id="grid" class="grid"></div>
             </div>
         </div>
-        <div id="pal" class="pal"></div>
+        <div style="display: flex; width: 100%; background: #000; border-top: 1px solid #444; z-index: 80; align-items: center;">
+            <div id="mouse-colors" style="display: flex; gap: 8px; padding: 10px 20px; border-right: 1px solid #444;">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+                    <span style="font-size: 9px; color: #aaa; font-weight: bold;">LEFT</span>
+                    <div class="c-box" id="c-box-left" title="Left Click Color"></div>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+                    <span style="font-size: 9px; color: #aaa; font-weight: bold;">MID</span>
+                    <div class="c-box" id="c-box-mid" title="Middle Click Color"></div>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+                    <span style="font-size: 9px; color: #aaa; font-weight: bold;">RIGHT</span>
+                    <div class="c-box" id="c-box-right" title="Right Click Color"></div>
+                </div>
+            </div>
+            <div id="pal" class="pal" style="border-top: none; flex: 1;"></div>
+        </div>
     </div>
 </div>
 
@@ -329,7 +345,7 @@
 </div>
 
 <script>
-let mode = 1, pen = 0, drawing = false, currentTool = 'pen', startCoords = null, previewPixels = [];
+let mode = 1, penLeft = 1, penMid = 0, penRight = 0, activeMouseButton = 0, drawing = false, drawingButton = 0, currentTool = 'pen', startCoords = null, previewPixels = [];
 let scale = 1, posX = 0, posY = 0, isPanning = false;
 let animTimer = null, animSpeed = 500, animZoom = 8;
 let isAnimDragging = false, animOffset = [0, 0];
@@ -534,29 +550,39 @@ function initGrid(conf) {
     currentConfig = { fw, fh, nf, mode };
     const totalW = fw * nf, g = document.getElementById('grid');
     g.innerHTML = ''; g.className = `grid m${mode}`;
+    g.oncontextmenu = (e) => e.preventDefault();
     if (document.getElementById('hide-grid-cb')?.checked) g.classList.add('hide-lines');
     g.style.gridTemplateColumns = `repeat(${totalW}, auto)`;
     for(let i=0; i < totalW * fh; i++) {
         const p = document.createElement('div'); p.className = 'pixel'; p.style.background = getColors()[0]; p.dataset.pen = 0;
         p.onmousedown = (e) => { 
-            if(e.button === 0) { 
+            if(e.button === 0 || e.button === 1 || e.button === 2) { 
+                e.preventDefault();
+                if (e.button === 1) e.stopPropagation();
                 previewPixels.forEach(pp => { pp.classList.remove('preview'); pp.classList.remove('select-preview'); });
                 previewPixels = [];
-                if (currentTool === 'fill') floodFill(i % totalW, Math.floor(i / totalW), parseInt(p.dataset.pen));
-                else if (currentTool === 'text') handleTextTool(i % totalW, Math.floor(i / totalW));
+                let targetPen = e.button === 0 ? penLeft : (e.button === 1 ? penMid : penRight);
+                if (currentTool === 'fill') floodFill(i % totalW, Math.floor(i / totalW), targetPen, parseInt(p.dataset.pen));
+                else if (currentTool === 'text') handleTextTool(i % totalW, Math.floor(i / totalW), targetPen);
                 else { 
                     saveState(); 
                     drawing = true; 
+                    drawingButton = e.button;
                     startCoords = {x: i % totalW, y: Math.floor(i / totalW)}; 
-                    if(currentTool==='pen') paint(p); 
+                    if(currentTool==='pen') paint(p, targetPen); 
                 }
             } 
         };
-        p.onmouseenter = () => { 
+        p.onmouseenter = (e) => { 
             currentHoveredFrame = Math.floor((i % totalW) / fw) + 1;
             document.getElementById('current-frame-info').innerText = `Current Frame: ${currentHoveredFrame}`;
-            if(drawing) { if(currentTool==='pen') paint(p); else updatePreview(i % totalW, Math.floor(i / totalW)); } 
+            if(drawing) { 
+                let targetPen = drawingButton === 0 ? penLeft : (drawingButton === 1 ? penMid : penRight);
+                if(currentTool==='pen') paint(p, targetPen); 
+                else updatePreview(i % totalW, Math.floor(i / totalW)); 
+            } 
         };
+        p.oncontextmenu = (e) => e.preventDefault();
         g.appendChild(p);
     }
     let mult = (mode == 0 ? 24 : (mode == 1 ? 12 : 6));
@@ -570,11 +596,26 @@ function initGrid(conf) {
 function buildPal() {
     const b = document.getElementById('pal'); b.innerHTML = '';
     getColors().forEach((c, i) => {
-        const d = document.createElement('div'); d.className = 'c-box' + (i==pen?' sel':''); d.style.background = c;
-        d.onclick = () => { pen = i; buildPal(); };
+        const isSel = (activeMouseButton === 0 && penLeft === i) || 
+                      (activeMouseButton === 1 && penMid === i) || 
+                      (activeMouseButton === 2 && penRight === i);
+        const d = document.createElement('div'); d.className = 'c-box' + (isSel ? ' sel' : ''); d.style.background = c;
+        d.onclick = () => { 
+            if (activeMouseButton === 0) penLeft = i;
+            else if (activeMouseButton === 1) penMid = i;
+            else if (activeMouseButton === 2) penRight = i;
+            buildPal(); 
+        };
         d.oncontextmenu = (e) => { e.preventDefault(); showHardwareColors(i); };
         b.appendChild(d);
     });
+    const colors = getColors();
+    document.getElementById('c-box-left').style.background = colors[penLeft];
+    document.getElementById('c-box-mid').style.background = colors[penMid];
+    document.getElementById('c-box-right').style.background = colors[penRight];
+    document.getElementById('c-box-left').className = 'c-box' + (activeMouseButton === 0 ? ' sel' : '');
+    document.getElementById('c-box-mid').className = 'c-box' + (activeMouseButton === 1 ? ' sel' : '');
+    document.getElementById('c-box-right').className = 'c-box' + (activeMouseButton === 2 ? ' sel' : '');
 }
 
 function setTool(t) { 
@@ -582,7 +623,7 @@ function setTool(t) {
     currentTool = t; document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.id==='btn-'+t));
     document.getElementById('select-mode-indicator').style.display = (t === 'select') ? 'block' : 'none';
 }
-function paint(el) { el.style.background = getColors()[pen]; el.dataset.pen = pen; }
+function paint(el, targetPen) { el.style.background = getColors()[targetPen]; el.dataset.pen = targetPen; }
 function getPixel(x, y) {
     const totalW = parseInt(document.getElementById('fw').value) * parseInt(document.getElementById('nf').value);
     const fh = parseInt(document.getElementById('fh').value);
@@ -622,8 +663,8 @@ function getCircle(x0,y0,x1,y1) {
     return res;
 }
 
-function floodFill(startX, startY, targetPen) {
-    if (targetPen === pen) return; saveState();
+function floodFill(startX, startY, targetPen, replacePen) {
+    if (replacePen === targetPen) return; saveState();
     const fw = parseInt(document.getElementById('fw').value), totalW = fw * parseInt(document.getElementById('nf').value), fh = parseInt(document.getElementById('fh').value);
     const px = document.getElementById('grid').children, colors = getColors();
     const fIdx = Math.floor(startX / fw), fMinX = fIdx * fw, fMaxX = fMinX + fw - 1;
@@ -632,11 +673,11 @@ function floodFill(startX, startY, targetPen) {
         let {x, y} = q.shift();
         if (x < fMinX || x > fMaxX || y < 0 || y >= fh || visited.has(key(x,y))) continue;
         let p = px[y * totalW + x];
-        if (parseInt(p.dataset.pen) === targetPen) { p.dataset.pen = pen; p.style.background = colors[pen]; visited.add(key(x,y)); q.push({x: x+1, y}, {x: x-1, y}, {x, y: y+1}, {x, y: y-1}); }
+        if (parseInt(p.dataset.pen) === replacePen) { p.dataset.pen = targetPen; p.style.background = colors[targetPen]; visited.add(key(x,y)); q.push({x: x+1, y}, {x: x-1, y}, {x, y: y+1}, {x, y: y-1}); }
     }
 }
 
-function handleTextTool(x, y) {
+function handleTextTool(x, y, targetPen) {
     const textToDraw = prompt("Introduce el texto a dibujar:");
     if (!textToDraw) return;
 
@@ -664,10 +705,10 @@ function handleTextTool(x, y) {
     if (!finalSize || isNaN(finalSize)) return;
 
     saveState();
-    drawTextOnGrid(textToDraw, parseInt(finalSize), x, y, spill);
+    drawTextOnGrid(textToDraw, parseInt(finalSize), x, y, spill, targetPen);
 }
 
-function drawTextOnGrid(text, fontSize, startX, startY, spill) {
+function drawTextOnGrid(text, fontSize, startX, startY, spill, targetPen) {
     const fw = parseInt(document.getElementById('fw').value);
     const fh = parseInt(document.getElementById('fh').value);
     const totalW = fw * parseInt(document.getElementById('nf').value);
@@ -697,8 +738,8 @@ function drawTextOnGrid(text, fontSize, startX, startY, spill) {
                 if (withinBounds) {
                     const p = getPixel(gridX, gridY);
                     if (p) {
-                        p.dataset.pen = pen;
-                        p.style.background = colors[pen];
+                        p.dataset.pen = targetPen;
+                        p.style.background = colors[targetPen];
                         pixelsDrawn++;
                     }
                 }
@@ -1029,7 +1070,7 @@ function startNewProject(force = false) {
     undoStack = [];
     updateFileStatus("Ninguno");
     updateByteInfo();
-    pen = 1;
+    penLeft = 1; penMid = 0; penRight = 0; activeMouseButton = 0;
     initGrid(false);
 }
 
@@ -1042,7 +1083,8 @@ window.onmousemove = (e) => { if(isPanning) { posX += e.movementX; posY += e.mov
 window.onmouseup = () => { 
     if(drawing && currentTool !== 'pen'){ 
         if (currentTool !== 'select') { 
-            previewPixels.forEach(p => { paint(p); p.classList.remove('preview'); }); 
+            let targetPen = drawingButton === 0 ? penLeft : (drawingButton === 1 ? penMid : penRight);
+            previewPixels.forEach(p => { paint(p, targetPen); p.classList.remove('preview'); }); 
             previewPixels=[]; 
         }
     } 
@@ -1082,7 +1124,7 @@ window.onkeydown = (e) => {
                 e.preventDefault();
                 saveState();
                 const colors = getColors();
-                previewPixels.forEach(p => { p.dataset.pen = pen; p.style.background = colors[pen]; });
+                previewPixels.forEach(p => { p.dataset.pen = penLeft; p.style.background = colors[penLeft]; });
                 return;
             }
         }
@@ -1112,6 +1154,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (i.id === 'nf') { i.onfocus = () => { previousNfValue = i.value; }; i.onchange = () => { document.getElementById('new-project-msg').innerText = `¿Cambiar a ${i.value} frames? Esto BORRARÁ el lienzo actual.`; document.getElementById('new-project-overlay').style.display = 'flex'; };
         } else i.onchange = () => initGrid(true);
     }); 
+    document.getElementById('c-box-left').onclick = () => { activeMouseButton = 0; buildPal(); };
+    document.getElementById('c-box-mid').onclick = () => { activeMouseButton = 1; buildPal(); };
+    document.getElementById('c-box-right').onclick = () => { activeMouseButton = 2; buildPal(); };
 });
 </script>
 </body>
