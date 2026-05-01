@@ -94,7 +94,7 @@
 <header>
     <h1 style="margin:0; display:flex; align-items:baseline; gap:10px;">
         CPC SPRITE STUDIO
-        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 30/04/2026 23:32:30]</span>
+        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 01/05/2026 23:42]</span>
     </h1>
     <div id="file-status">Archivo: <b>Ninguno</b> | Último acceso: <b>---</b></div>
 </header>
@@ -110,6 +110,7 @@
         <button class="side-btn" style="color:#f1c40f" onclick="triggerLoad()" title="Load Project"><i>📂</i></button>
         <button class="side-btn" style="color:#2ecc71" onclick="saveProject()" title="Save Project"><i>💾</i></button>
         <button class="side-btn" style="color:var(--cpc-cyan)" onclick="showHardwareColors()" title="Hardware List"><i>PAL</i></button>
+        <input type="file" id="scr-load-input" style="display:none" accept=".scr,.bin" onchange="importScr(this)">
         <input type="file" id="load-input" style="display:none" accept=".json" onchange="loadProject(this)">
         <hr style="width:70%; border:0; border-top:1px solid #444;">
         <button class="side-btn tool-btn active" id="btn-pen" onclick="setTool('pen')" title="Pen Tool (P)"><i>✎</i><span class="hotkey">P</span></button>
@@ -151,7 +152,8 @@
             </div>
             <button onclick="fixMode0Width()" style="background:#e67e22; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none; margin-right:5px;" title="Reduce ancho a la mitad (Solo Modo 0)">FIX M0 WIDTH</button>
             <button onclick="playAnim()" style="background:#8e44ad; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none; margin-right:5px;">ANIMATE</button>
-            <button onclick="showImportMenu()" style="background:#2980b9; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none; margin-right:5px;">IMPORT</button>
+            <button onclick="showImportMenu()" style="background:#2980b9; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none; margin-right:5px;">Import Sprite</button>
+            <button onclick="triggerScrLoad()" style="background:#f39c12; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none; margin-right:5px;">Import SCR</button>
             <button onclick="showExportMenu()" style="background:#27ae60; color:white; font-weight:bold; padding:8px 15px; cursor:pointer; border:none;">EXPORT</button>
             
             <div style="display:flex; align-items:center; gap:12px; font-size:11px; color:#aaa; margin-left:10px;">
@@ -355,8 +357,8 @@
 <div id="custom-palette-overlay" class="overlay">
     <div class="modal" style="width: 450px;">
         <h2>IMPORT CUSTOM PALETTE</h2>
-        <p style="font-size: 11px; color: #aaa;">Pega los valores (0x1A, 3, &H01...) para las plumas.</p>
-        <textarea id="custom-palette-area" style="width: 100%; height: 100px; background: #000; color: #f1c40f; border: 1px solid #444; font-family: monospace; padding: 10px; box-sizing: border-box; resize: none;" placeholder="0x01, 0x1A, 13..."></textarea>
+        <p style="font-size: 11px; color: #aaa;">Pega valores sueltos (0x1A, 3, &H01...) o comandos BASIC (ink 0,26...).</p>
+        <textarea id="custom-palette-area" style="width: 100%; height: 100px; background: #000; color: #f1c40f; border: 1px solid #444; font-family: monospace; padding: 10px; box-sizing: border-box; resize: none;" placeholder="0x01, 0x1A, 13... o ink 0,26:ink 1,25..."></textarea>
         <div style="display: flex; gap: 10px; margin-top: 10px;">
             <button onclick="processCustomPalette()" style="background:#2ecc71; color:white;">APLICAR</button>
             <button onclick="closeCustomPaletteImport()" style="background:#500; color:white">CANCELAR</button>
@@ -458,23 +460,44 @@ function closeCustomPaletteImport() {
 function processCustomPalette() {
     const text = document.getElementById('custom-palette-area').value;
     const state = getActiveState();
-    const regex = /(?:0x|&H|&)([0-9a-fA-F]+)|([0-9]+)/g;
-    let matches;
-    const newValues = [];
     const hwToIdx = {
         0x54:0,  0x44:1,  0x55:2,  0x47:3,  0x4b:4,  0x4f:5,  0x51:6,  0x49:7,  0x53:8,
         0x58:9,  0x40:10, 0x41:11, 0x59:12, 0x48:13, 0x4d:14, 0x52:15, 0x4a:16, 0x4e:17,
         0x5c:18, 0x4c:19, 0x50:20, 0x5d:21, 0x56:22, 0x57:23, 0x5b:24, 0x5a:25, 0x46:26
     };
-    while ((matches = regex.exec(text)) !== null) {
-        let val;
-        if (matches[1]) val = parseInt(matches[1], 16);
-        else if (matches[2]) val = parseInt(matches[2], 10);
-        if (val !== undefined) {
-            if (hwToIdx[val] !== undefined) val = hwToIdx[val];
-            newValues.push(val);
+
+    let newValues = [];
+    let indexedValues = {};
+    let hasInk = false;
+    let matches;
+
+    const inkRegex = /ink\s+(\d+)\s*,\s*(?:(?:0x|&H|&)([0-9a-fA-F]+)|([0-9]+))/gi;
+    while ((matches = inkRegex.exec(text)) !== null) {
+        hasInk = true;
+        let idx = parseInt(matches[1], 10);
+        let val = matches[2] ? parseInt(matches[2], 16) : parseInt(matches[3], 10);
+        if (hwToIdx[val] !== undefined) val = hwToIdx[val];
+        indexedValues[idx] = val;
+    }
+
+    if (hasInk) {
+        let maxIdx = Math.max(...Object.keys(indexedValues).map(Number));
+        for (let i = 0; i <= maxIdx; i++) {
+            newValues.push(indexedValues[i] !== undefined ? indexedValues[i] : -1);
+        }
+    } else {
+        const regex = /(?:0x|&H|&)([0-9a-fA-F]+)|([0-9]+)/g;
+        while ((matches = regex.exec(text)) !== null) {
+            let val;
+            if (matches[1]) val = parseInt(matches[1], 16);
+            else if (matches[2]) val = parseInt(matches[2], 10);
+            if (val !== undefined) {
+                if (hwToIdx[val] !== undefined) val = hwToIdx[val];
+                newValues.push(val);
+            }
         }
     }
+
     if (newValues.length === 0) { alert("No se encontraron valores válidos."); return; }
     saveState(); // for undo
     for (let i = 0; i < Math.min(newValues.length, state.fModes[state.config.mode].length); i++) {
@@ -934,9 +957,35 @@ function processImport() {
     const state = getActiveState();
     if (text.includes('{')) {
         let content = text.substring(text.indexOf('{') + 1, text.lastIndexOf('}'));
-        let bytes = (content.match(/0x[0-9a-fA-F]+|[0-9]+/g) || []).map(v => v.startsWith('0x') ? parseInt(v, 16) : parseInt(v, 10));
+        let cleanContent = content.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+        let bytes = (cleanContent.match(/0x[0-9a-fA-F]+|[0-9]+/g) || []).map(v => v.startsWith('0x') ? parseInt(v, 16) : parseInt(v, 10));
         if (bytes.length === 0) return;
-        let wI = prompt("Formato C detectado.\n¿ANCHO en BYTES?", "6"), hI = prompt("¿ALTO píxeles?", "16");
+        
+        let defW = "6", defH = "16";
+        let metaMatch = text.match(/Width:\s*(\d+)px,\s*Height:\s*(\d+)px/i);
+        if (metaMatch) {
+            let pxW = parseInt(metaMatch[1]);
+            defH = metaMatch[2];
+            let modeMatch = text.match(/Mode\s+(\d+)/i);
+            let mode = modeMatch ? parseInt(modeMatch[1]) : state.config.mode;
+            let ppb = mode === 0 ? 2 : (mode === 1 ? 4 : 8);
+            defW = Math.ceil(pxW / ppb).toString();
+        } else {
+            let lines = cleanContent.split('\n');
+            for (let line of lines) {
+                let items = line.trim().match(/0x[0-9a-fA-F]+|[0-9]+/g);
+                if (items && items.length > 0) {
+                    defW = items.length.toString();
+                    if (bytes.length % items.length === 0) {
+                        let rows = bytes.length / items.length;
+                        defH = (rows % state.config.fh === 0) ? state.config.fh.toString() : rows.toString();
+                    }
+                    break;
+                }
+            }
+        }
+        
+        let wI = prompt("Formato C detectado.\n¿ANCHO en BYTES?", defW), hI = prompt("¿ALTO píxeles?", defH);
         if (!wI || !hI) return;
         let wB = parseInt(wI), h = parseInt(hI), fS = wB * h, nF = Math.floor(bytes.length / fS);
         saveState(); closeAnim();
@@ -1040,6 +1089,93 @@ function applyImportedFrames(fF, oT) {
         }
     });
     closeImport(); updateByteInfo();
+}
+
+function triggerScrLoad() {
+    const i = document.getElementById('scr-load-input');
+    i.value = null;
+    i.click();
+}
+
+function importScr(input) {
+    if (!input.files[0]) return;
+    const file = input.files[0];
+    if (!confirm(`¿Cargar pantalla "${file.name}" en una nueva pestaña?`)) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const buffer = e.target.result;
+        let bytes = new Uint8Array(16384);
+        let skipBytes = 0;
+        
+        if (buffer.byteLength > 16384) {
+            const extra = buffer.byteLength - 16384;
+            const skipStr = prompt(`El fichero tiene ${buffer.byteLength} bytes (${extra} bytes extra).\nSi tiene cabecera la screen ¿Cuántos bytes quieres saltar al inicio?`, extra.toString());
+            if (skipStr === null) return;
+            skipBytes = parseInt(skipStr);
+            if (isNaN(skipBytes) || skipBytes < 0 || skipBytes >= buffer.byteLength) {
+                alert("Cantidad de bytes a saltar inválida.");
+                return;
+            }
+        }
+        
+        const availableBytes = Math.min(16384, buffer.byteLength - skipBytes);
+        if (availableBytes > 0) {
+            bytes.set(new Uint8Array(buffer, skipBytes, availableBytes));
+        }
+        
+        const modeStr = prompt("Pantalla detectada. ¿En qué MODO está? (0, 1, o 2)", "0");
+        if (modeStr === null || !['0', '1', '2'].includes(modeStr)) return;
+        
+        const mode = parseInt(modeStr);
+        
+        closeAnim();
+
+        if (!isCurrentTabEmpty()) {
+            addTab();
+        } else {
+            saveState();
+        }
+
+        const state = getActiveState();
+        state.name = file.name.replace(/\..+$/, '').toUpperCase();
+        
+        document.getElementById('mode').value = mode;
+        const fw = (mode === 0) ? 160 : (mode === 1) ? 320 : 640;
+        const fh = 200;
+        const nf = 1;
+        document.getElementById('fw').value = fw;
+        document.getElementById('fh').value = fh;
+        document.getElementById('nf').value = nf;
+
+        buildTabsUI();
+        initGrid(false);
+        
+        const ppb = mode === 0 ? 2 : (mode === 1) ? 4 : 8;
+        const totalW = fw * nf;
+        const px = document.querySelectorAll('.pixel');
+        const colors = getColors();
+
+        for (let y = 0; y < fh; y++) {
+            const lineAddr = (Math.floor(y / 8) * 80) + ((y % 8) * 2048);
+            for (let xByte = 0; xByte < (fw / ppb); xByte++) {
+                const byteAddr = lineAddr + xByte;
+                if (byteAddr >= 16384) continue;
+                const byteVal = bytes[byteAddr];
+                const pens = unpackByte(byteVal);
+                for (let p = 0; p < ppb; p++) {
+                    const pixelX = (xByte * ppb) + p;
+                    const pixelIndex = (y * totalW) + pixelX;
+                    if (px[pixelIndex]) {
+                        px[pixelIndex].dataset.pen = pens[p];
+                        px[pixelIndex].style.background = colors[pens[p]];
+                    }
+                }
+            }
+        }
+        updateByteInfo();
+    };
+    reader.readAsArrayBuffer(file);
 }
 
 function unpackByte(b) {
@@ -1147,8 +1283,8 @@ function exportDSK() {
     const ppb = mode==0?2:mode==1?4:8;
     const wBytes = Math.ceil(fw / ppb);
     const totalSize = wBytes * fh * (nf + 1); // frames reales + frame fantasma
-    if (totalSize > 26000) {
-        alert("¡LÍMITE DE MEMORIA!\n\nEl tamaño total (" + totalSize + " bytes) excede la memoria RAM continua segura del Amstrad CPC (aprox. 26 KB).\n\nEl fotograma 4 en adelante chocará con el 'workspace' del sistema de disco AMSDOS (ubicado en &A700), causando ruido visual, y el frame de borrado invadirá la memoria de video (&C000).\n\nPara cargar en BASIC sin corrupción, debes reducir el tamaño en píxeles o usar menos frames.");
+    if (totalSize > 38000) {
+        alert("¡LÍMITE DE MEMORIA!\n\nEl tamaño total (" + totalSize + " bytes) excede la memoria RAM continua segura del Amstrad CPC (aprox. 38 KB).\n\nEl final de la animación chocará con el 'workspace' del sistema de disco AMSDOS (ubicado en &A700), causando ruido visual, y el frame de borrado invadirá la memoria de video (&C000).\n\nPara cargar en BASIC sin corrupción, debes reducir el tamaño en píxeles o usar menos frames.");
     }
     closeExport(); document.getElementById('dsk-export-overlay').style.display = 'flex'; 
 }
@@ -1315,6 +1451,9 @@ function closeAnim() { if(animTimer) clearInterval(animTimer); animWin.style.dis
 window.onkeydown = (e) => { 
     const state = getActiveState();
     const kP = e.key.toLowerCase(); 
+    
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
     if ((e.ctrlKey || e.metaKey) && kP === 'z') { e.preventDefault(); undo(); return; }
     if ((e.ctrlKey || e.metaKey) && kP === 'c') { e.preventDefault(); copySelection(); return; }
     

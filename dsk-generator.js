@@ -10,15 +10,18 @@ function createAmsdosHeader(filename, extension, type, length, loadAddr, execAdd
     for (let i = 0; i < 8; i++) header[1 + i] = i < filename.length ? filename.charCodeAt(i) : 0x20;
     for (let i = 0; i < 3; i++) header[9 + i] = i < extension.length ? extension.charCodeAt(i) : 0x20;
     header[18] = type; 
+    
     header[24] = length & 0xFF;
     header[25] = (length >> 8) & 0xFF;
     header[21] = loadAddr & 0xFF;
     header[22] = (loadAddr >> 8) & 0xFF;
     header[26] = execAddr & 0xFF;
     header[27] = (execAddr >> 8) & 0xFF;
-    header[64] = length & 0xFF;
-    header[65] = (length >> 8) & 0xFF;
-    header[66] = (length >> 16) & 0xFF;
+    
+    let fileLength = length + 128;
+    header[64] = fileLength & 0xFF;
+    header[65] = (fileLength >> 8) & 0xFF;
+    header[66] = (fileLength >> 16) & 0xFF;
     let checksum = 0;
     for (let i = 0; i <= 66; i++) checksum += header[i];
     header[67] = checksum & 0xFF;
@@ -58,18 +61,18 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed) {
             let sOff = offset + 0x18 + (s * 8);
             buffer[sOff + 0] = t; buffer[sOff + 1] = 0;
             buffer[sOff + 2] = 0xC1 + s; buffer[sOff + 3] = 2; 
-            buffer[sOff + 4] = 0; buffer[sOff + 5] = 0; buffer[sOff + 6] = 0; buffer[sOff + 7] = 0x02;
+            buffer[sOff + 4] = 0; buffer[sOff + 5] = 0; buffer[sOff + 6] = 0; buffer[sOff + 7] = 0;
         }
     }
 
     const ppb = (mode == 0 ? 2 : (mode == 1 ? 4 : 8));
     const wBytes = Math.ceil(fw / ppb);
 
-    const palette = fModes[mode];
+    const palette = getActiveState().fModes[mode];
     const inkLine = "30 " + palette.map((hw, idx) => `INK ${idx},${hw}`).join(":") + ":BORDER 0";
     
-    const memAddr = animate ? "&3EFF" : "&3FFF";
-    const loadAddrStr = animate ? "&4000" : "&C000";
+    const memAddr = animate ? "&1FFF" : "&3FFF";
+    const loadAddrStr = animate ? "&2200" : "&C000";
     
     let loader = `10 MEMORY ${memAddr}\r\n20 MODE ${mode}\r\n25 PRINT "Please wait..."\r\n${inkLine}\r\n40 LOAD "SCREEN.BIN",${loadAddrStr}\r\n`;
 
@@ -80,25 +83,25 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed) {
         const safeY = Math.max(0, Math.floor((200 - fh) / 2));
         const maxPx = Math.max(0, 80 - wBytes);
         const dxInit = maxPx > 0 ? 1 : 0;
-        loader += `50 FOR i=0 TO 67: READ a: POKE &3F00+i, a: NEXT i\r\n` +
+        loader += `50 FOR i=0 TO 67: READ a: POKE &2100+i, a: NEXT i\r\n` +
                  `51 DATA 221,110,8,221,102,9,221,78,6,221,70,0,197,229,120,230\r\n` +
                  `52 DATA 7,7,7,7,246,192,87,30,0,120,203,63,203,63,203\r\n` +
                  `53 DATA 63,111,38,0,41,41,41,41,229,41,41,193,9,25,221\r\n` +
                  `54 DATA 94,2,221,86,3,25,235,225,221,78,4,221,70,5,237,176\r\n` +
                  `55 DATA 193,4,13,32,201,201\r\n` +
-                 `56 FOR i=0 TO 26: READ a: POKE &3F50+i, a: NEXT i\r\n` +
-                 `57 DATA 221,78,0,221,70,1,120,177,200,221,110,2,221,102,3,91,84,19\r\n` +
+                 `56 FOR i=0 TO 26: READ a: POKE &2150+i, a: NEXT i\r\n` +
+                 `57 DATA 221,78,0,221,70,1,120,177,200,221,110,2,221,102,3,93,84,19\r\n` +
                  `58 DATA 54,0,11,120,177,200,237,176,201\r\n` +
                  `60 f=0: w=${wBytes}: h=${fh}: nf=${nf}\r\n` +
-                 `65 b=&4000 + (w * h * nf): sz=w*h\r\n` +
+                 `65 b=&2200 + (w * h * nf): sz=w*h\r\n` +
                  `66 IF b > 32767 THEN b = b - 65536\r\n` +
-                 `67 CALL &3F50, b, sz\r\n` +
+                 `67 CALL &2150, b, sz\r\n` +
                  `70 px=0: py=${safeY}: dx=${dxInit}\r\n80 CLS\r\n90 WHILE 1\r\n` +
                  `100 FOR i=1 TO ${delay}: CALL &BD19: NEXT i\r\n` + 
-                 `110 CALL &3F00, b, h, w, px, py\r\n120 px = px + dx\r\n` +
+                 `110 CALL &2100, b, h, w, px, py\r\n120 px = px + dx\r\n` +
                  `130 IF px < 0 OR px > ${maxPx} THEN dx = -dx: px = px + dx\r\n` +
-                 `140 s = &4000 + (f * w * h): IF s > 32767 THEN s = s - 65536\r\n` +
-                 `150 CALL &3F00, s, h, w, px, py\r\n` +
+                 `140 s = &2200 + (f * w * h): IF s > 32767 THEN s = s - 65536\r\n` +
+                 `150 CALL &2100, s, h, w, px, py\r\n` +
                  `160 f = (f + 1) MOD nf\r\n170 WEND\r\n\x1A`;
     }
 
@@ -106,7 +109,7 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed) {
     for (let i = 0; i < loader.length; i++) fileBas[i] = loader.charCodeAt(i);
 
     const actualSize = animate ? (wBytes * fh * nf) : 16384; 
-    const loadAddr = animate ? 0x4000 : 0xC000;
+    const loadAddr = animate ? 0x2200 : 0xC000;
 
     const headerBin = createAmsdosHeader("SCREEN  ", "BIN", 2, actualSize, loadAddr, 0x0000);
     
