@@ -77,6 +77,8 @@
             font-size: 12px;
             max-width: 150px;
             flex-shrink: 0;
+            user-select: none;
+            -webkit-user-select: none;
         }
         #tabs-container .tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         #tabs-container .tab.active { background: #222; color: var(--cpc-cyan); font-weight: bold; }
@@ -211,6 +213,7 @@
             <h3>1. Project Management & Basic Setup</h3>
             <ul>
             <li><b>Save/Load Project <span class="hotkey-tag">JSON</span>:</b> Use the Floppy Disk and Folder icons on the top left, or press <span class="hotkey-tag">Ctrl+S</span> to Quick Save. Saves the workspace configuration and all pixels. <span class="example">Example: Make a backup of your character sheet before making destructive palette changes.</span></li>
+            <li><b>Multi-Sprite Tabs:</b> Use the '+' button in the top tab bar to add multiple sprites to your project. Double-click a tab to rename it, and <b>drag and drop</b> tabs to reorder them!</li>
             <li><b>Undo <span class="hotkey-tag">Ctrl+Z</span>:</b> Reverts your last drawing action or transformation (up to 50 states).</li>
                 <li><b>Canvas Dimensions:</b> Change width (`DIM: x`) and height (`DIM: y`). The canvas dynamically recalculates the bytes needed depending on the selected CPC Mode.</li>
                 <li><b>Amstrad CPC Video Modes:</b> 
@@ -956,9 +959,10 @@ function processImport() {
     const text = document.getElementById('import-area').value;
     const state = getActiveState();
     if (text.includes('{')) {
-        let content = text.substring(text.indexOf('{') + 1, text.lastIndexOf('}'));
-        let cleanContent = content.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
-        let bytes = (cleanContent.match(/0x[0-9a-fA-F]+|[0-9]+/g) || []).map(v => v.startsWith('0x') ? parseInt(v, 16) : parseInt(v, 10));
+        let cleanText = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+        let blocks = cleanText.match(/\{([\s\S]*?)\}/g) || [];
+        let content = blocks.map(b => b.substring(1, b.length - 1)).join(',');
+        let bytes = (content.match(/0x[0-9a-fA-F]+|[0-9]+/g) || []).map(v => v.startsWith('0x') ? parseInt(v, 16) : parseInt(v, 10));
         if (bytes.length === 0) return;
         
         let defW = "6", defH = "16";
@@ -971,7 +975,7 @@ function processImport() {
             let ppb = mode === 0 ? 2 : (mode === 1 ? 4 : 8);
             defW = Math.ceil(pxW / ppb).toString();
         } else {
-            let lines = cleanContent.split('\n');
+            let lines = content.split('\n');
             for (let line of lines) {
                 let items = line.trim().match(/0x[0-9a-fA-F]+|[0-9]+/g);
                 if (items && items.length > 0) {
@@ -1326,6 +1330,27 @@ function buildTabsUI() {
         const tabEl = document.createElement('div');
         tabEl.className = 'tab' + (index === activeTab ? ' active' : '');
         tabEl.dataset.index = index;
+        
+        // Configuración de Drag & Drop
+        tabEl.draggable = true;
+        tabEl.ondragstart = (e) => {
+            e.dataTransfer.setData('text/plain', index);
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => tabEl.style.opacity = '0.5', 0);
+        };
+        tabEl.ondragend = () => {
+            tabEl.style.opacity = '1';
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('drag-over'));
+        };
+        tabEl.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; tabEl.classList.add('drag-over'); };
+        tabEl.ondragleave = () => tabEl.classList.remove('drag-over');
+        tabEl.ondrop = (e) => {
+            e.preventDefault();
+            tabEl.classList.remove('drag-over');
+            const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+            if (fromIndex !== index && !isNaN(fromIndex)) moveTab(fromIndex, index);
+        };
+
         tabEl.onclick = () => switchTab(index);
         const nameSpan = document.createElement('span');
         nameSpan.innerText = tab.name;
@@ -1370,6 +1395,28 @@ function switchTab(index) {
     if (index === activeTab) return;
     saveCurrentUIToState();
     activeTab = index;
+    loadStateToUI();
+    buildTabsUI();
+}
+
+function moveTab(fromIndex, toIndex) {
+    saveCurrentUIToState(); // Guardamos el estado actual por si había píxeles sin guardar
+    
+    // Extraemos la pestaña arrastrada y la colocamos en el nuevo destino
+    const movedTab = spriteTabs.splice(fromIndex, 1)[0];
+    spriteTabs.splice(toIndex, 0, movedTab);
+    
+    // Reajustamos el tracking de "activeTab" para que la vista siga en la misma pestaña
+    if (activeTab === fromIndex) {
+        activeTab = toIndex;
+    } else {
+        if (fromIndex < activeTab && toIndex >= activeTab) {
+            activeTab--;
+        } else if (fromIndex > activeTab && toIndex <= activeTab) {
+            activeTab++;
+        }
+    }
+    
     loadStateToUI();
     buildTabsUI();
 }
