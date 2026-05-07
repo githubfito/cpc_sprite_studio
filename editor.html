@@ -1222,9 +1222,10 @@ function doExportABASC() {
         closeExport();
         return;
     }
-    let res = `' ABASC DATA\n' CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${state.fModes[mode].join(', ')}]\n`; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
+        const safeName = state.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    let res = `' ABASC DATA - ${state.name}\n' CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${state.fModes[mode].join(', ')}]\n`; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
     for (let f = 0; f < nf; f++) {
-        res += `\nLABEL FRAME${f + 1}:\n    DATA &${fh.toString(16).padStart(2,'0')}${bPR.toString(16).padStart(2,'0')}\n`;
+            res += `\nLABEL ${safeName}FRAME${f + 1}:\n    DATA &${fh.toString(16).padStart(2,'0')}${bPR.toString(16).padStart(2,'0')}\n`;
         for (let y = 0; y < fh; y++) {
             let rb = []; for (let x = 0; x < fw; x += ppb) { let pns = []; for (let p = 0; p < ppb; p++) pns.push(px[y * totalW + (f * fw) + x + p] || 0); rb.push(packByte(pns)); }
             let words = []; for (let i = 0; i < rb.length; i += 2) words.push("&" + ((rb[i+1]||0).toString(16).padStart(2,'0') + rb[i].toString(16).padStart(2,'0')).toUpperCase());
@@ -1239,10 +1240,11 @@ function doExportC() {
     const useDecimal = document.getElementById('export-decimal-cb').checked;
     const {fw, fh, nf, mode} = state.config;
     const totalW = fw * nf, ppb = mode==0?2:mode==1?4:8;
+    const safeName = state.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
     let res = `// CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${state.fModes[mode].join(', ')}]\n`;
     res += "\n"; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
     for (let f = 0; f < nf; f++) {
-        let frameName = "sprite_data" + f.toString().padStart(2, '0');
+        let frameName = `${safeName}_${f.toString().padStart(2, '0')}`;
         res += `const unsigned char ${frameName}[] = {\n`;
         res += `    // Frame ${f + 1}\n`;
         for (let y = 0; y < fh; y++) {
