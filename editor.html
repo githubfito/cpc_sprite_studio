@@ -120,7 +120,8 @@
         <button class="side-btn tool-btn" id="btn-box" onclick="setTool('box')" title="Box Tool (R)"><i>□</i><span class="hotkey">R</span></button>
         <button class="side-btn tool-btn" id="btn-circle" onclick="setTool('circle')" title="Circle Tool (C)"><i>○</i><span class="hotkey">C</span></button>
         <button class="side-btn tool-btn" id="btn-select" onclick="setTool('select')" title="Select Fragment (S)"><i>⬚</i><span class="hotkey">S</span></button>
-        <button class="side-btn tool-btn" id="btn-fill" onclick="setTool('fill')" title="Paint Bucket (G)"><i>▅</i><span class="hotkey">G</span></button>
+        <button class="side-btn tool-btn" id="btn-fill" onclick="setTool('fill')" title="Paint Bucket (G)"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/></svg><span class="hotkey">G</span></button>
+        <button class="side-btn tool-btn" id="btn-picker" onclick="setTool('picker')" title="Color Picker (I)"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg><span class="hotkey">I</span></button>
         <button class="side-btn tool-btn" id="btn-text" onclick="setTool('text')" title="Text Tool (T)"><i>T</i><span class="hotkey">T</span></button>
         <hr style="width:70%; border:0; border-top:1px solid #444;">
         <button class="side-btn" onclick="addFrame()" title="Add Frame"><i>+F</i></button>
@@ -232,6 +233,7 @@
                 <li><b>Box <span class="hotkey-tag">R</span>:</b> Draws an empty rectangle. Click the starting corner and drag to the opposite corner. <span class="example">Example: Creating structural walls for a maze game.</span></li>
                 <li><b>Circle <span class="hotkey-tag">C</span>:</b> Draws a perfect circle outline.</li>
                 <li><b>Paint Bucket <span class="hotkey-tag">G</span>:</b> Fills an enclosed area of the same color with the currently selected color.</li>
+                <li><b>Color Picker <span class="hotkey-tag">I</span>:</b> Click on any pixel to select its color for the active mouse button.</li>
                 <li><b>Select Fragment <span class="hotkey-tag">S</span>:</b> Click and drag to select a specific rectangular area. Press <span class="hotkey-tag">Ctrl+C</span> to copy, and <span class="hotkey-tag">Ctrl+V</span> to paste it anywhere on the canvas.</li>
                 <li><b>Text Tool <span class="hotkey-tag">T</span>:</b> Click anywhere to type text directly onto the canvas. Allows dynamic font resizing and auto-spill over frames.</li>
             <li><b>Hide Grid:</b> Check the "Hide Grid" box on the top toolbar to remove the grid lines and preview your sprite as it will look on a real CRT.</li>
@@ -651,7 +653,14 @@ function initGrid(conf, pixelDataToRestore = null) {
                 previewPixels.forEach(pp => { pp.classList.remove('preview'); pp.classList.remove('select-preview'); });
                 previewPixels = [];
                 let targetPen = e.button === 0 ? state.penLeft : (e.button === 1 ? state.penMid : state.penRight);
-                if (currentTool === 'fill') floodFill(i % totalW, Math.floor(i / totalW), targetPen, parseInt(p.dataset.pen));
+                if (currentTool === 'picker') {
+                    let pickedPen = parseInt(p.dataset.pen);
+                    if (e.button === 0) state.penLeft = pickedPen;
+                    else if (e.button === 1) state.penMid = pickedPen;
+                    else if (e.button === 2) state.penRight = pickedPen;
+                    state.activeMouseButton = e.button;
+                    buildPal();
+                } else if (currentTool === 'fill') floodFill(i % totalW, Math.floor(i / totalW), targetPen, parseInt(p.dataset.pen));
                 else if (currentTool === 'text') handleTextTool(i % totalW, Math.floor(i / totalW), targetPen);
                 else { 
                     saveState(); 
@@ -1533,7 +1542,7 @@ window.onkeydown = (e) => {
     if (!e.ctrlKey && !e.metaKey) {
         if ((kP === 'h' || kP === 'v') && currentHoveredFrame > 0 && Date.now() - lastMirrorTime >= 1000) { if (kP === 'h') flipHDirect(currentHoveredFrame - 1); else flipVDirect(currentHoveredFrame - 1); lastMirrorTime = Date.now(); }
         if (kP === 'q' && currentHoveredFrame > 0 && Date.now() - lastRotateTime >= 1000) { rotateDirect(currentHoveredFrame - 1); lastRotateTime = Date.now(); }
-        if(kP === 'p') setTool('pen'); if(kP === '/') setTool('line'); if(kP === 'r') setTool('box'); if(kP === 'c') setTool('circle'); if(kP === 's') setTool('select'); if(kP === 'g') setTool('fill'); if(kP === 't') setTool('text'); if(kP === 'escape') closeAnim(); 
+        if(kP === 'p') setTool('pen'); if(kP === 'i') setTool('picker'); if(kP === '/') setTool('line'); if(kP === 'r') setTool('box'); if(kP === 'c') setTool('circle'); if(kP === 's') setTool('select'); if(kP === 'g') setTool('fill'); if(kP === 't') setTool('text'); if(kP === 'escape') closeAnim(); 
     }
     if(animWin.style.display === 'block') { if(kP === '+' || kP === '=') { animSpeed = Math.max(50, animSpeed - 50); playAnim(); } if(kP === '-' || kP === '_') { animSpeed = Math.min(2000, animSpeed + 50); playAnim(); } } 
 };
