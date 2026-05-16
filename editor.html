@@ -1640,7 +1640,8 @@ function doExportABASC() {
         return;
     }
         const safeName = state.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    let res = `' ABASC DATA - ${state.name}\n' CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px | Palette: [${state.fModes[mode].join(', ')}]\n`; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
+    let inkLine = state.fModes[mode].map((color, index) => `INK ${index},${color}`).join(' : ');
+    let res = `' ABASC DATA - ${state.name}\n' CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px\n' Palette config:\n${inkLine}\n`; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
     for (let f = 0; f < nf; f++) {
             res += `\nLABEL ${safeName}FRAME${f + 1}:\n    DATA &${fh.toString(16).padStart(2,'0')}${bPR.toString(16).padStart(2,'0')}\n`;
         for (let y = 0; y < fh; y++) {
