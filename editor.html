@@ -402,8 +402,10 @@ CALL &BBAD      ; TXT SET MATRIX (establece la tabla)</pre>
         <h2 id="hw-title">AMSTRAD CPC HARDWARE COLORS</h2>
         <div id="hw-colors-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 10px;"></div>
         <div style="display: flex; gap: 10px; margin-top: 10px; justify-content: center; flex-wrap: wrap;">
-            <button onclick="resetCurrentPalette()" style="background:#e67e22; color:white; width: auto; padding: 10px 15px;">RESET PALETTE</button>
-            <button onclick="showCustomPaletteImport()" style="background:#3498db; color:white; width: auto; padding: 10px 15px;">CUSTOM PALETTE</button>
+            <button onclick="copyPaletteCSV()" style="background:#8e44ad; color:white; width: auto; padding: 10px 15px;" title="Copiar CSV">COPY CSV</button>
+            <button onclick="copyPaletteABASC()" style="background:#f1c40f; color:black; font-weight:bold; width: auto; padding: 10px 15px;" title="Copiar INK (ABASC)">COPY INK</button>
+            <button onclick="resetCurrentPalette()" style="background:#e67e22; color:white; width: auto; padding: 10px 15px;">RESET</button>
+            <button onclick="showCustomPaletteImport()" style="background:#3498db; color:white; width: auto; padding: 10px 15px;">IMPORTAR</button>
             <button onclick="closeHardwareColors()" style="background:#500; color:white; width: auto; padding: 10px 15px;">CERRAR</button>
         </div>
     </div>
@@ -760,6 +762,33 @@ function resetCurrentPalette() {
     state.fModes[state.config.mode] = [...defaults[state.config.mode]];
     refreshColors();
     closeHardwareColors();
+}
+
+function copyPaletteCSV() {
+    const state = getActiveState();
+    if (!state) return;
+    const pal = state.fModes[state.config.mode];
+    copyToClipboard(pal.join(', '), "Paleta copiada en formato CSV:");
+}
+
+function copyPaletteABASC() {
+    const state = getActiveState();
+    if (!state) return;
+    const pal = state.fModes[state.config.mode];
+    const inkLine = pal.map((color, index) => `INK ${index},${color}`).join(' : ');
+    copyToClipboard(inkLine, "Paleta copiada en formato ABASC:");
+}
+
+function copyToClipboard(text, msg) {
+    let textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed"; textArea.style.top = "0"; textArea.style.left = "0"; textArea.style.opacity = "0";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try { document.execCommand('copy'); alert(msg + "\n\n" + text); } 
+    catch (err) { alert("Error al copiar al portapapeles."); }
+    textArea.remove();
 }
 
 function showCustomPaletteImport() {
