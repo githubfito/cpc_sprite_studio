@@ -1,0 +1,47 @@
+CPC SPRITE STUDIO
+
+Generación Sprites para Amstrad cpc
+
+	-Mode 0, Mode 1 y Mode 2
+	-Sprite animado compuesto de varios frames
+	-Se muestran automáticamente las tintas de ese modo (mode 0=16, mode 1=4, mode 2=2)
+	-Tú defines la dimensiones (horizontal en pixels, vertical en pixels)
+	-Lápiz en los tres botones del ratón. Los tres con color personalizado
+	-Copia y pega fragmentos dentro del mismo Sprite o sobre otro Sprite diferente
+	-Control+Z. Para hacer undo.
+
+	FRAMES
+	- Add frame (tú especificas cual de ellos)
+	- Delete frame (tú especificas cual de ellos)
+
+	CLIPBOARD
+	- You can paste images from clipboard
+
+	PALETA
+	- Cambia a tu antojo el color de una de las tintas para ver el resultado
+	- Importar paleta (0x1A, 3, &H01...) o comandos BASIC (ink 0,26...)
+	- Definir paleta por defecto
+
+	PESTAÑAS	
+	Reúne todos tus sprites en un solo proyecto
+
+	GUARDAR
+	Guarda un archivo JSON que incluirá todos los sprites (pestañas)
+
+	EFECTOS/UTILES
+	- Líneas
+	- Cuadrados
+	- Circulo
+	- Herramienta para seleccionar (copiar y pegar)
+	- Herramienta Rellenar
+	- Herramienta adquirir color. Pulsa cualquier pixel y define el lápiz con ese color
+	- Texto. Introduce texto dentro del Sprite (básico y sin probar profundamente)
+	- Swap horizontal (todos los frames del sprite actual o el que tú elijas)
+	- Swap vertical (todos los frames del sprite actual o el que tú elijas)
+	- Desplazamiento multidireccional pixel a pixel (de todos los frames del Sprite actual o de solo uno)
+	- Rotación 90 a la derecha
+	
+
+
+	
+

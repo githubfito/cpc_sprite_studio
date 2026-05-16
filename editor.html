@@ -309,6 +309,7 @@
         <button onclick="exportDSK()" style="background:#d35400; color:white;">3) DOWNLOAD .DSK (CON LOADER)</button>
         <button onclick="doExportABASC()" style="background:#f1c40f; color:black; font-weight:bold;">4) ABASC DATA (WORDS)</button>
         <button onclick="doExportC()" style="background:#9b59b6; color:white; font-weight:bold;">5) C ARRAY ({ 0x00... })</button>
+        <button onclick="showAlfabetExportMenu()" style="background:#e74c3c; color:white; font-weight:bold;">6) ALPHABET FORMAT</button>
         <button onclick="closeExport()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
     </div>
 </div>
@@ -319,6 +320,20 @@
         <button onclick="doExportDSK(true)" style="background:#8e44ad; color:white;">1) ANIMACIÓN POR HARDWARE (BASIC)</button>
         <button onclick="doExportDSK(false)" style="background:#d35400; color:white;">2) TIRA DE FRAMES ESTÁTICA</button>
         <button onclick="closeDSKMenu()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
+    </div>
+</div>
+
+<div id="alfabet-export-overlay" class="overlay">
+    <div class="modal">
+        <h2>EXPORTAR ALFABETO (1-bit/px)</h2>
+        <div style="display:flex; justify-content:center; gap: 10px; margin-bottom: 10px; color: #fff; font-size: 14px;">
+            <label>Desde Frame: <input type="number" id="alfa-ex-from" value="1" style="width:60px;"></label>
+            <label>Hasta Frame: <input type="number" id="alfa-ex-to" value="1" style="width:60px;"></label>
+        </div>
+        <button onclick="doAlfabetExport('BIN')" style="background:#3498db; color:white;">DOWNLOAD .BIN</button>
+        <button onclick="doAlfabetExport('C')" style="background:#9b59b6; color:white;">C ARRAY ({ 0x00... })</button>
+        <button onclick="doAlfabetExport('ABASC')" style="background:#f1c40f; color:black; font-weight:bold;">ABASC DATA (BYTES)</button>
+        <button onclick="closeAlfabetExportMenu()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
     </div>
 </div>
 
@@ -856,14 +871,69 @@ function handlePasteEvent(e) {
 function processPastedImage(img) {
     const rows = parseInt(prompt("FILAS?", "1")) || 1, cols = parseInt(prompt("COLUMNAS?", "1")) || 1;
     saveState();
+    const state = getActiveState();
     const fw = parseInt(document.getElementById('fw').value), fh = parseInt(document.getElementById('fh').value), nf = parseInt(document.getElementById('nf').value), totalW = fw * nf;
     const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height;
     const ctx = cv.getContext('2d'); ctx.drawImage(img, 0, 0);
     const imgData = ctx.getImageData(0, 0, img.width, img.height).data;
-    const palRGB = getColors().map(hex => ({ r: parseInt(hex.slice(1,3),16), g: parseInt(hex.slice(3,5),16), b: parseInt(hex.slice(5,7),16) }));
-    const pxEls = document.querySelectorAll('.pixel'), colors = getColors(), ignoreInk0 = document.getElementById('transparent-bg-cb').checked;
+    const pxEls = document.querySelectorAll('.pixel');
+    const ignoreInk0 = document.getElementById('transparent-bg-cb').checked;
     const bgRGBA = `${imgData[0]},${imgData[1]},${imgData[2]},${imgData[3]}`; // Assuming top-left is bg
+
+    // 1. Obtener la paleta hardware completa de Amstrad CPC
+    const hwRGB = cpcPal.map(hex => ({ r: parseInt(hex.slice(1,3),16), g: parseInt(hex.slice(3,5),16), b: parseInt(hex.slice(5,7),16) }));
+    let colorFreq = {};
+
+    // PASO 1: Analizar qué colores hardware se necesitan comparando con los 27 colores
     let cF = 0;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (cF >= nf) break;
+            const sX = c * (img.width / cols), sY = r * (img.height / rows);
+            const stX = (img.width / cols) / fw, stY = (img.height / rows) / fh;
+            for (let y = 0; y < fh; y++) {
+                for (let x = 0; x < fw; x++) {
+                    const smX = Math.floor(sX + (x * stX) + (stX/2)), smY = Math.floor(sY + (y * stY) + (stY/2));
+                    const i = (smY * img.width + smX) * 4, rP = imgData[i], gP = imgData[i+1], bP = imgData[i+2], aP = imgData[i+3];
+                    
+                    if (aP === 0) continue; // Ignoramos pixels transparentes
+                    if (ignoreInk0 && `${rP},${gP},${bP},${aP}` === bgRGBA) continue; // Si se ignora el fondo, saltamos el color detectado como fondo
+
+                    let minDist = Infinity, bestHw = 0;
+                    hwRGB.forEach((col, hwIdx) => { 
+                        let d = Math.sqrt(Math.pow(rP-col.r,2)+Math.pow(gP-col.g,2)+Math.pow(bP-col.b,2)); 
+                        if(d < minDist){ minDist=d; bestHw=hwIdx; } 
+                    });
+                    colorFreq[bestHw] = (colorFreq[bestHw] || 0) + 1;
+                }
+            }
+            cF++;
+        }
+    }
+
+    // Actualizar la paleta actual con los colores hardware más usados
+    let ink0Color = state.fModes[state.config.mode][0];
+    let sortedHw = Object.keys(colorFreq)
+        .map(Number)
+        .filter(hwIdx => hwIdx !== ink0Color) // Evitar duplicar la tinta 0
+        .sort((a,b) => colorFreq[b] - colorFreq[a]);
+    
+    let maxInks = state.fModes[state.config.mode].length;
+    
+    // Dejamos la tinta 0 intacta (suele ser el color transparente) y rellenamos el resto
+    for (let i = 1; i < maxInks; i++) {
+        if (sortedHw.length > 0) {
+            state.fModes[state.config.mode][i] = sortedHw.shift();
+        }
+    }
+    
+    // Refrescar UI con los nuevos colores de la paleta
+    buildPal();
+    const colors = getColors();
+    const palRGB = colors.map(hex => ({ r: parseInt(hex.slice(1,3),16), g: parseInt(hex.slice(3,5),16), b: parseInt(hex.slice(5,7),16) }));
+
+    // PASO 2: Dibujar los píxeles mapeando a la paleta recién asignada
+    cF = 0;
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             if (cF >= nf) break;
@@ -875,12 +945,33 @@ function processPastedImage(img) {
                     const i = (smY * img.width + smX) * 4, rP = imgData[i], gP = imgData[i+1], bP = imgData[i+2], aP = imgData[i+3];
                     const tIdx = (y * totalW) + (cF * fw + x);
                     if (!pxEls[tIdx]) continue;
-                    if (!ignoreInk0 && (aP === 0 || `${rP},${gP},${bP},${aP}` === bgRGBA)) { pxEls[tIdx].dataset.pen = 0; pxEls[tIdx].style.background = colors[0]; }
-                    else {
-                        let minDist = Infinity, best = 0;
-                        palRGB.forEach((col, pI) => { let d = Math.sqrt(Math.pow(rP-col.r,2)+Math.pow(gP-col.g,2)+Math.pow(bP-col.b,2)); if(d < minDist){ minDist=d; best=pI; } });
-                        pxEls[tIdx].dataset.pen = best; pxEls[tIdx].style.background = colors[best];
+                    
+                    const isTransparent = aP === 0;
+                    const isBgColor = ignoreInk0 && `${rP},${gP},${bP},${aP}` === bgRGBA;
+                    
+                    if (isTransparent || isBgColor) {
+                        if (ignoreInk0) {
+                            continue;
+                        } else {
+                            pxEls[tIdx].dataset.pen = 0; 
+                            pxEls[tIdx].style.background = colors[0];
+                            continue;
+                        }
                     }
+                    
+                    let best = 0;
+                    let minDist = Infinity;
+                    palRGB.forEach((col, pI) => { 
+                        let d = Math.sqrt(Math.pow(rP-col.r,2)+Math.pow(gP-col.g,2)+Math.pow(bP-col.b,2)); 
+                        if(d < minDist){ minDist=d; best=pI; } 
+                    });
+                    
+                    if (ignoreInk0 && best === 0) {
+                        continue; // No sobreescribir el lienzo si la tinta resultante es la 0 (fondo) y queremos ignorarla
+                    }
+                    
+                    pxEls[tIdx].dataset.pen = best; 
+                    pxEls[tIdx].style.background = colors[best];
                 }
             }
             cF++;
@@ -1628,6 +1719,84 @@ function doExportDSK(anim) {
 }
 function showExportMenu(){ document.getElementById('export-overlay').style['display']='flex'; }
 function closeExport(){ document.getElementById('export-overlay').style['display']='none'; }
+
+function showAlfabetExportMenu() {
+    closeExport();
+    const state = getActiveState();
+    document.getElementById('alfa-ex-from').value = 1;
+    document.getElementById('alfa-ex-to').value = state.config.nf;
+    document.getElementById('alfa-ex-to').max = state.config.nf;
+    document.getElementById('alfa-ex-from').min = 1;
+    document.getElementById('alfabet-export-overlay').style.display = 'flex';
+}
+
+function closeAlfabetExportMenu() {
+    document.getElementById('alfabet-export-overlay').style.display = 'none';
+}
+
+function doAlfabetExport(format) {
+    const state = getActiveState();
+    const {fw, fh, nf} = state.config;
+    let fromF = parseInt(document.getElementById('alfa-ex-from').value);
+    let toF = parseInt(document.getElementById('alfa-ex-to').value);
+    const useDecimal = document.getElementById('export-decimal-cb').checked;
+    
+    if (fromF < 1) fromF = 1;
+    if (toF > nf) toF = nf;
+    if (fromF > toF) { alert("Rango de frames inválido."); return; }
+
+    const totalW = fw * nf;
+    const px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
+    const wBytes = Math.ceil(fw / 8);
+    
+    let bytes = [];
+    for (let f = fromF - 1; f < toF; f++) {
+        for (let y = 0; y < fh; y++) {
+            for (let b = 0; b < wBytes; b++) {
+                let byteVal = 0;
+                for (let p = 0; p < 8; p++) {
+                    const pixelX = (f * fw) + (b * 8) + p;
+                    if ((b * 8) + p < fw) {
+                        const pen = px[y * totalW + pixelX] || 0;
+                        if (pen > 0) byteVal |= (1 << (7 - p));
+                    }
+                }
+                bytes.push(byteVal);
+            }
+        }
+    }
+
+    if (format === 'BIN') {
+        const buf = new Uint8Array(bytes);
+        triggerDownload(new Blob([buf]), "alfabeto.bin");
+        closeAlfabetExportMenu();
+    } else if (format === 'C') {
+        const safeName = state.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+        let res = `// Alphabet Export (1-bit/px) | Frames: ${fromF} to ${toF} | Width: ${fw}px, Height: ${fh}px\n`;
+        res += `const unsigned char ${safeName}_alfa[] = {\n`;
+        let lines = [];
+        for (let i = 0; i < bytes.length; i += wBytes * fh) {
+            let frameBytes = bytes.slice(i, i + (wBytes * fh));
+            lines.push(`    // Frame ${fromF + Math.floor(i / (wBytes * fh))}\n    ` + frameBytes.map(b => useDecimal ? b.toString(10) : "0x" + b.toString(16).toUpperCase().padStart(2, '0')).join(", "));
+        }
+        res += lines.join(",\n") + "\n};\n";
+        window.open().document.write("<pre>" + res + "</pre>");
+        closeAlfabetExportMenu();
+    } else if (format === 'ABASC') {
+        const safeName = state.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        let res = `' ABASC ALPHABET DATA (SYMBOL) - ${state.name}\n' Frames: ${fromF} to ${toF} | Width: ${fw}px, Height: ${fh}px\n`;
+        
+        res += `\nSYMBOL AFTER ${fromF - 1}\n`;
+        for (let i = 0; i < bytes.length; i += wBytes * fh) {
+            let charIndex = fromF - 1 + Math.floor(i / (wBytes * fh));
+            let frameBytes = bytes.slice(i, i + (wBytes * fh));
+            res += `SYMBOL ${charIndex}, ${frameBytes.map(b => useDecimal ? b.toString(10) : "&" + b.toString(16).toUpperCase().padStart(2, '0')).join(", ")}\n`;
+        }
+        window.open().document.write("<pre>" + res + "</pre>");
+        closeAlfabetExportMenu();
+    }
+}
+
 function confirmNewProject() { 
     document.getElementById('new-project-overlay').style.display = 'none'; 
     saveState(); 
