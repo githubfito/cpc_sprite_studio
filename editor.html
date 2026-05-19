@@ -1822,11 +1822,17 @@ function doAlfabetExport(format) {
         const safeName = state.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
         let res = `' ABASC ALPHABET DATA (SYMBOL) - ${state.name}\n' Frames: ${fromF} to ${toF} | Width: ${fw}px, Height: ${fh}px\n`;
         
-        res += `\nSYMBOL AFTER ${fromF - 1}\n`;
+        const getCharStr = (code) => {
+            if (code >= 33 && code <= 126) return ` ' [ ${String.fromCharCode(code)} ]`;
+            if (code === 32) return ` ' [ SPACE ]`;
+            return '';
+        };
+
+        res += `\nSYMBOL AFTER ${fromF - 1}${getCharStr(fromF - 1)}\n`;
         for (let i = 0; i < bytes.length; i += wBytes * fh) {
             let charIndex = fromF - 1 + Math.floor(i / (wBytes * fh));
             let frameBytes = bytes.slice(i, i + (wBytes * fh));
-            res += `SYMBOL ${charIndex}, ${frameBytes.map(b => useDecimal ? b.toString(10) : "&" + b.toString(16).toUpperCase().padStart(2, '0')).join(", ")}\n`;
+            res += `SYMBOL ${charIndex}, ${frameBytes.map(b => useDecimal ? b.toString(10) : "&" + b.toString(16).toUpperCase().padStart(2, '0')).join(", ")}${getCharStr(charIndex)}\n`;
         }
         window.open().document.write("<pre>" + res + "</pre>");
         closeAlfabetExportMenu();
