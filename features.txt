@@ -7,23 +7,25 @@ Generación Sprites para Amstrad cpc
 	-Se muestran automáticamente las tintas de ese modo (mode 0=16, mode 1=4, mode 2=2)
 	-Tú defines la dimensiones (horizontal en pixels, vertical en pixels)
 	-Lápiz en los tres botones del ratón. Los tres con color personalizado
-	-Copia y pega fragmentos dentro del mismo Sprite o sobre otro Sprite diferente
 	-Control+Z. Para hacer undo.
+	-Ocultar grid
 
 	FRAMES
 	- Add frame (tú especificas cual de ellos)
 	- Delete frame (tú especificas cual de ellos)
 
-	CLIPBOARD
-	- You can paste images from clipboard
+	ANIMATE
+	- Ventana de previsualización de frames consecutivos, resizable
 
 	PALETA
 	- Cambia a tu antojo el color de una de las tintas para ver el resultado
 	- Importar paleta (0x1A, 3, &H01...) o comandos BASIC (ink 0,26...)
+	- Exporta paleta separada por comas o formato INK
 	- Definir paleta por defecto
 
 	PESTAÑAS	
 	Reúne todos tus sprites en un solo proyecto
+	Añade, elimina, reordena pestañas
 
 	GUARDAR
 	Guarda un archivo JSON que incluirá todos los sprites (pestañas)
@@ -40,8 +42,10 @@ Generación Sprites para Amstrad cpc
 	- Swap vertical (todos los frames del sprite actual o el que tú elijas)
 	- Desplazamiento multidireccional pixel a pixel (de todos los frames del Sprite actual o de solo uno)
 	- Rotación 90 a la derecha
-	
 
+	IMPORTAR
+	-CLIPBOARD: Importa y adapta a las medidas actuales del Sprite,
+	la imagen del portapapeles, pudiendo elegir entre utilizar paleta actual o efectuar acercamiento a colores hw amstrad
+	-SCREEN: Importar 16k en formato pantalla screen.scr para b800
 
-	
-
+	EXPORTAR
