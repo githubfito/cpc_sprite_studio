@@ -89,6 +89,12 @@
             font-size: 18px; cursor: pointer; font-weight: bold; border-radius: 4px 4px 0 0;
             margin-left: 4px;
         }
+        
+        /* Estilos para los tiradores de redimensionamiento */
+        .resize-handle {
+            position: absolute; width: 8px; height: 8px; background: #f1c40f; 
+            border: 1px solid #000; z-index: 200; display: none;
+        }
     </style>
 </head>
 <body>
@@ -445,6 +451,14 @@ let mirrorDir = 'H', currentHoveredFrame = 0, isShiftMode = false, lastMirrorTim
 let clipboardData = null;
 let currentPalIndexToEdit = -1;
 let isPanning = false;
+
+// --- Variables para Bounding Box Interactivo ---
+let editingShape = false;
+let shapeStartCoords = null;
+let shapeEndCoords = null;
+let activeHandle = null;
+let currentHoveredCoords = null;
+let shapeHandlesEl = null;
 
 // --- Multi-tab State Management ---
 let spriteTabs = [];
@@ -1056,6 +1070,7 @@ function updateFileStatus(name) {
 function initGrid(conf, pixelDataToRestore = null) {
     if(conf && !confirm("Wipe canvas?")) return;
     if(conf) saveState();
+    if (editingShape) commitShape();
     closeAnim();
     const state = getActiveState();
     const mode = parseInt(document.getElementById('mode').value);
@@ -1069,9 +1084,12 @@ function initGrid(conf, pixelDataToRestore = null) {
     for(let i=0; i < totalW * fh; i++) {
         const p = document.createElement('div'); p.className = 'pixel'; p.style.background = getColors()[0]; p.dataset.pen = 0;
         p.onmousedown = (e) => { 
+            if (editingShape) commitShape();
+
             if(e.button === 0 || e.button === 1 || e.button === 2) { 
                 e.preventDefault();
                 if (e.button === 1) e.stopPropagation();
+                currentHoveredCoords = {x: i % totalW, y: Math.floor(i / totalW)};
                 previewPixels.forEach(pp => { pp.classList.remove('preview'); pp.classList.remove('select-preview'); });
                 previewPixels = [];
                 let targetPen = e.button === 0 ? state.penLeft : (e.button === 1 ? state.penMid : state.penRight);
@@ -1100,8 +1118,22 @@ function initGrid(conf, pixelDataToRestore = null) {
             } 
         };
         p.onmouseenter = (e) => { 
+            currentHoveredCoords = {x: i % totalW, y: Math.floor(i / totalW)};
             currentHoveredFrame = Math.floor((i % totalW) / fw) + 1;
             document.getElementById('current-frame-info').innerText = `Current Frame: ${currentHoveredFrame}`;
+            
+            if (activeHandle) {
+                if (activeHandle === 'tl') { shapeStartCoords.x = currentHoveredCoords.x; shapeStartCoords.y = currentHoveredCoords.y; }
+                if (activeHandle === 'tr') { shapeEndCoords.x = currentHoveredCoords.x; shapeStartCoords.y = currentHoveredCoords.y; }
+                if (activeHandle === 'bl') { shapeStartCoords.x = currentHoveredCoords.x; shapeEndCoords.y = currentHoveredCoords.y; }
+                if (activeHandle === 'br') { shapeEndCoords.x = currentHoveredCoords.x; shapeEndCoords.y = currentHoveredCoords.y; }
+                
+                startCoords = { ...shapeStartCoords };
+                updatePreview(shapeEndCoords.x, shapeEndCoords.y);
+                showHandles(shapeStartCoords, shapeEndCoords);
+                return;
+            }
+
             if(drawing) { 
                 let targetPen = drawingButton === 0 ? state.penLeft : (drawingButton === 1 ? state.penMid : state.penRight);
                 if(currentTool === 'pen') paint(p, targetPen); 
@@ -1112,7 +1144,7 @@ function initGrid(conf, pixelDataToRestore = null) {
                         paint(p, targetPen);
                     }
                 }
-                else updatePreview(i % totalW, Math.floor(i / totalW)); 
+                else updatePreview(currentHoveredCoords.x, currentHoveredCoords.y); 
             } 
         };
         p.oncontextmenu = (e) => e.preventDefault();
@@ -1123,6 +1155,7 @@ function initGrid(conf, pixelDataToRestore = null) {
         const guide = document.createElement('div'); guide.className = 'f-guide'; guide.style.left = (i * fw * mult) + "px";
         const lbl = document.createElement('div'); lbl.className = 'f-label'; lbl.innerText = `FRAME ${i + 1}`; guide.appendChild(lbl); g.appendChild(guide);
     }
+    if (shapeHandlesEl) g.appendChild(shapeHandlesEl);
     if (pixelDataToRestore) {
         restoreData(pixelDataToRestore);
     }
@@ -1157,6 +1190,7 @@ function buildPal() {
 }
 
 function setTool(t) { 
+    if (editingShape) commitShape();
     previewPixels.forEach(p => { p.classList.remove('preview'); p.classList.remove('select-preview'); }); previewPixels = [];
     currentTool = t; document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.id==='btn-'+t));
     document.getElementById('select-mode-indicator').style.display = (t === 'select') ? 'block' : 'none';
@@ -1199,6 +1233,72 @@ function getCircle(x0,y0,x1,y1) {
     let res = [], r = Math.round(Math.sqrt(Math.pow(x1-x0,2)+Math.pow(y1-y0,2))), x=r, y=0, err=1-x;
     while(x>=y){ res.push({x:x0+x,y:y0+y},{x:x0+y,y:y0+x},{x:x0-y,y:y0+x},{x:x0-x,y:y0+y},{x:x0-x,y:y0-y},{x:x0-y,y:y0-x},{x:x0+y,y:y0-x},{x:x0+x,y:y0-y}); y++; if(err<0) err+=2*y+1; else {x--; err+=2*(y-x)+1;} }
     return res;
+}
+
+function getShapeBounds(start, end) {
+    if (currentTool === 'circle') {
+        let r = Math.round(Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)));
+        return { minX: start.x - r, minY: start.y - r, maxX: start.x + r, maxY: start.y + r };
+    } else {
+        return { 
+            minX: Math.min(start.x, end.x), 
+            minY: Math.min(start.y, end.y), 
+            maxX: Math.max(start.x, end.x), 
+            maxY: Math.max(start.y, end.y) 
+        };
+    }
+}
+
+function updateHandlesScale() {
+    const state = getActiveState();
+    if (!state) return;
+    
+    // Hacer que el tamaño sea proporcional a las dimensiones del lienzo (sprite)
+    const maxDim = Math.max(state.config.fw, state.config.fh);
+    const sizeMultiplier = Math.max(1, Math.sqrt(maxDim / 16));
+    
+    // 1.5 es un multiplicador base para que siempre sean cómodos de agarrar
+    const scaleFactor = (1 / state.viewport.scale) * sizeMultiplier * 1.5;
+    
+    document.querySelectorAll('.resize-handle').forEach(h => {
+        h.style.transform = `scale(${scaleFactor})`;
+    });
+}
+
+function showHandles(start, end) {
+    if (!shapeHandlesEl) return;
+    const mode = getActiveState().config.mode;
+    const pw = mode === 0 ? 24 : (mode === 1 ? 12 : 6);
+    const ph = 12;
+    
+    let bounds = getShapeBounds(start, end);
+    const left = bounds.minX * pw, top = bounds.minY * ph;
+    const right = (bounds.maxX + 1) * pw, bottom = (bounds.maxY + 1) * ph;
+    
+    const hTL = document.getElementById('handle-tl'), hTR = document.getElementById('handle-tr');
+    const hBL = document.getElementById('handle-bl'), hBR = document.getElementById('handle-br');
+    hTL.style.left = `${left - 4}px`; hTL.style.top = `${top - 4}px`; hTL.style.display = 'block';
+    hTR.style.left = `${right - 4}px`; hTR.style.top = `${top - 4}px`; hTR.style.display = 'block';
+    hBL.style.left = `${left - 4}px`; hBL.style.top = `${bottom - 4}px`; hBL.style.display = 'block';
+    hBR.style.left = `${right - 4}px`; hBR.style.top = `${bottom - 4}px`; hBR.style.display = 'block';
+    
+    updateHandlesScale();
+}
+
+function commitShape() {
+    if (!editingShape) return;
+    const state = getActiveState();
+    let targetPen = drawingButton === 0 ? state.penLeft : (drawingButton === 1 ? state.penMid : state.penRight);
+    previewPixels.forEach(p => { paint(p, targetPen); p.classList.remove('preview'); }); 
+    previewPixels=[]; editingShape = false;
+    document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'none');
+}
+
+function cancelShape() {
+    if (!editingShape) return;
+    previewPixels.forEach(p => p.classList.remove('preview'));
+    previewPixels = []; editingShape = false;
+    document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'none');
 }
 
 function floodFill(startX, startY, targetPen, replacePen) {
@@ -1947,6 +2047,7 @@ function removeTab(index) {
 
 function switchTab(index) {
     if (index === activeTab) return;
+    if (editingShape) commitShape();
     saveCurrentUIToState();
     activeTab = index;
     loadStateToUI();
@@ -1969,6 +2070,8 @@ function moveTab(fromIndex, toIndex) {
         } else if (fromIndex > activeTab && toIndex <= activeTab) {
             activeTab++;
         }
+
+    if (kP === 'enter' && editingShape) { e.preventDefault(); commitShape(); return; }
     }
     
     loadStateToUI();
@@ -2022,8 +2125,19 @@ window.onmousemove = (e) => {
 };
 window.onmouseup = () => { 
     const state = getActiveState();
+    
+    if (activeHandle) {
+        activeHandle = null;
+        return;
+    }
+
     if(drawing && currentTool !== 'pen' && currentTool !== 'checker'){ 
-        if (currentTool !== 'select') { 
+        if (currentTool === 'box' || currentTool === 'circle') {
+            editingShape = true;
+            shapeStartCoords = { ...startCoords };
+            shapeEndCoords = { ...currentHoveredCoords };
+            showHandles(shapeStartCoords, shapeEndCoords);
+        } else if (currentTool !== 'select') { 
             let targetPen = drawingButton === 0 ? state.penLeft : (drawingButton === 1 ? state.penMid : state.penRight);
             previewPixels.forEach(p => { paint(p, targetPen); p.classList.remove('preview'); }); 
             previewPixels=[]; 
@@ -2078,14 +2192,30 @@ window.onkeydown = (e) => {
         }
 
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(kP)) {
-        e.preventDefault(); let dir = 'L'; if (kP === 'arrowright') dir = 'R'; if (kP === 'arrowup') dir = 'U'; if (kP === 'arrowdown') dir = 'D';
+        e.preventDefault(); 
+        let dir = 'L'; if (kP === 'arrowright') dir = 'R'; if (kP === 'arrowup') dir = 'U'; if (kP === 'arrowdown') dir = 'D';
+        
+        if (editingShape) {
+            let dx = 0, dy = 0;
+            if (dir === 'L') dx = -1; else if (dir === 'R') dx = 1;
+            if (dir === 'U') dy = -1; else if (dir === 'D') dy = 1;
+            shapeStartCoords.x += dx; shapeStartCoords.y += dy;
+            shapeEndCoords.x += dx; shapeEndCoords.y += dy;
+            startCoords = { ...shapeStartCoords };
+            updatePreview(shapeEndCoords.x, shapeEndCoords.y);
+            showHandles(shapeStartCoords, shapeEndCoords);
+            return;
+        }
         if (isShiftMode && currentHoveredFrame > 0) shiftFrameDirect(currentHoveredFrame-1, dir);
         else if (document.getElementById('full-shift-cb').checked) shiftAllDirect(dir);
     }
     if (!e.ctrlKey && !e.metaKey) {
         if ((kP === 'h' || kP === 'v') && currentHoveredFrame > 0 && Date.now() - lastMirrorTime >= 1000) { if (kP === 'h') flipHDirect(currentHoveredFrame - 1); else flipVDirect(currentHoveredFrame - 1); lastMirrorTime = Date.now(); }
         if (kP === 'q' && currentHoveredFrame > 0 && Date.now() - lastRotateTime >= 1000) { rotateDirect(currentHoveredFrame - 1); lastRotateTime = Date.now(); }
-        if(kP === 'p') setTool('pen'); if(kP === 'k') setTool('checker'); if(kP === 'i') setTool('picker'); if(kP === '/') setTool('line'); if(kP === 'r') setTool('box'); if(kP === 'c') setTool('circle'); if(kP === 's') setTool('select'); if(kP === 'g') setTool('fill'); if(kP === 't') setTool('text'); if(kP === 'escape') closeAnim(); 
+        if(kP === 'p') setTool('pen'); if(kP === 'k') setTool('checker'); if(kP === 'i') setTool('picker'); if(kP === '/') setTool('line'); if(kP === 'r') setTool('box'); if(kP === 'c') setTool('circle'); if(kP === 's') setTool('select'); if(kP === 'g') setTool('fill'); if(kP === 't') setTool('text'); 
+        if(kP === 'escape') {
+            if (editingShape) { e.preventDefault(); cancelShape(); } else { closeAnim(); }
+        } 
     }
     if(animWin.style.display === 'block') { if(kP === '+' || kP === '=') { animSpeed = Math.max(50, animSpeed - 50); playAnim(); } if(kP === '-' || kP === '_') { animSpeed = Math.min(2000, animSpeed + 50); playAnim(); } } 
 };
@@ -2220,9 +2350,29 @@ function processAlfabetBinary(bytes, mode, skipHeader) {
 }
 
 document.addEventListener("DOMContentLoaded", () => { 
+    // Setup Handles
+    shapeHandlesEl = document.createElement('div');
+    shapeHandlesEl.id = 'shape-handles';
+    shapeHandlesEl.style.cssText = 'position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:100;';
+    ['tl','tr','bl','br'].forEach(pos => {
+        let h = document.createElement('div');
+        h.id = 'handle-' + pos;
+        h.className = 'resize-handle';
+        let cursor = (pos === 'tl' || pos === 'br') ? 'nwse-resize' : 'nesw-resize';
+        h.style.cssText = `cursor: ${cursor}; pointer-events:auto; display:none;`;
+        h.onmousedown = (e) => {
+            e.stopPropagation(); e.preventDefault(); activeHandle = pos;
+        };
+        shapeHandlesEl.appendChild(h);
+    });
+
     startNewProject(true); document.querySelectorAll('.toolbar input:not(#full-shift-cb, #hide-grid-cb, #transparent-bg-cb, #spill-text-cb)').forEach(i => {
-        if (i.id === 'nf') { i.onfocus = () => { getActiveState().previousNfValue = i.value; }; i.onchange = () => { document.getElementById('new-project-msg').innerText = `¿Cambiar a ${i.value} frames? Esto BORRARÁ el lienzo actual.`; document.getElementById('new-project-overlay').style.display = 'flex'; };
-        } else i.onchange = () => initGrid(true);
+        if (i.id === 'nf') { i.onfocus = () => { getActiveState().previousNfValue = i.value; }; }
+        i.onchange = () => {
+            let msg = i.id === 'nf' ? `¿Cambiar a ${i.value} frames?` : `¿Cambiar tamaño a ${document.getElementById('fw').value}x${document.getElementById('fh').value}?`;
+            document.getElementById('new-project-msg').innerText = `${msg} Esto BORRARÁ el lienzo actual.`; 
+            document.getElementById('new-project-overlay').style.display = 'flex'; 
+        };
     }); 
     document.getElementById('c-box-left').onclick = () => { getActiveState().activeMouseButton = 0; buildPal(); };
     document.getElementById('c-box-mid').onclick = () => { getActiveState().activeMouseButton = 1; buildPal(); };
