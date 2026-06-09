@@ -1230,23 +1230,37 @@ function getBoxFilled(x0,y0,x1,y1) {
     return res;
 }
 function getCircle(x0,y0,x1,y1) {
-    let res = [], r = Math.round(Math.sqrt(Math.pow(x1-x0,2)+Math.pow(y1-y0,2))), x=r, y=0, err=1-x;
-    while(x>=y){ res.push({x:x0+x,y:y0+y},{x:x0+y,y:y0+x},{x:x0-y,y:y0+x},{x:x0-x,y:y0+y},{x:x0-x,y:y0-y},{x:x0-y,y:y0-x},{x:x0+y,y:y0-x},{x:x0+x,y:y0-y}); y++; if(err<0) err+=2*y+1; else {x--; err+=2*(y-x)+1;} }
+    let res = [];
+    let a = Math.abs(x1 - x0), b = Math.abs(y1 - y0), b1 = b & 1;
+    let dx = 4 * (1 - a) * b * b, dy = 4 * (b1 + 1) * a * a;
+    let err = dx + dy + b1 * a * a, e2;
+
+    if (x0 > x1) { x0 = x1; x1 += a; }
+    if (y0 > y1) y0 = y1;
+    y0 += Math.floor((b + 1) / 2); y1 = y0 - b1;
+    a *= 8 * a; b1 = 8 * b * b;
+
+    do {
+        res.push({x: x1, y: y0}, {x: x0, y: y0}, {x: x0, y: y1}, {x: x1, y: y1});
+        e2 = 2 * err;
+        if (e2 <= dy) { y0++; y1--; err += dy += a; }
+        if (e2 >= dx || 2 * err > dy) { x0++; x1--; err += dx += b1; }
+    } while (x0 <= x1);
+    
+    while (y0 - y1 < b) {
+        res.push({x: x0 - 1, y: y0}, {x: x1 + 1, y: y0++}, {x: x0 - 1, y: y1}, {x: x1 + 1, y: y1--});
+    }
+    
     return res;
 }
 
 function getShapeBounds(start, end) {
-    if (currentTool === 'circle') {
-        let r = Math.round(Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)));
-        return { minX: start.x - r, minY: start.y - r, maxX: start.x + r, maxY: start.y + r };
-    } else {
-        return { 
-            minX: Math.min(start.x, end.x), 
-            minY: Math.min(start.y, end.y), 
-            maxX: Math.max(start.x, end.x), 
-            maxY: Math.max(start.y, end.y) 
-        };
-    }
+    return { 
+        minX: Math.min(start.x, end.x), 
+        minY: Math.min(start.y, end.y), 
+        maxX: Math.max(start.x, end.x), 
+        maxY: Math.max(start.y, end.y) 
+    };
 }
 
 function updateHandlesScale() {
@@ -1257,8 +1271,8 @@ function updateHandlesScale() {
     const maxDim = Math.max(state.config.fw, state.config.fh);
     const sizeMultiplier = Math.max(1, Math.sqrt(maxDim / 16));
     
-    // 1.5 es un multiplicador base para que siempre sean cómodos de agarrar
-    const scaleFactor = (1 / state.viewport.scale) * sizeMultiplier * 1.5;
+    // 0.8 es un multiplicador base para que siempre sean cómodos de agarrar
+    const scaleFactor = (1 / state.viewport.scale) * sizeMultiplier * 0.8;
     
     document.querySelectorAll('.resize-handle').forEach(h => {
         h.style.transform = `scale(${scaleFactor})`;
