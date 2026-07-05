@@ -210,10 +210,16 @@
                     <div class="c-box" id="c-box-right" title="Right Click Color"></div>
                 </div>
             </div>
+            <div id="coords-info" style="padding: 0 20px; font-size: 11px; color: #aaa; border-right: 1px solid #444;">
+                <div>Global: <span style="color: #f1c40f; font-weight: bold;">---</span></div>
+                <div>Frame: <span style="color: #f1c40f; font-weight: bold;">---</span></div>
+            </div>
             <div id="pal" class="pal" style="border-top: none; flex: 1;"></div>
         </div>
     </div>
 </div>
+
+
 
 <div id="help-overlay" class="overlay">
     <div class="modal" style="width: 750px;">
@@ -1121,6 +1127,10 @@ function initGrid(conf, pixelDataToRestore = null) {
             currentHoveredCoords = {x: i % totalW, y: Math.floor(i / totalW)};
             currentHoveredFrame = Math.floor((i % totalW) / fw) + 1;
             document.getElementById('current-frame-info').innerText = `Current Frame: ${currentHoveredFrame}`;
+            const coordsInfo = document.getElementById('coords-info');
+            const frameX = (currentHoveredCoords.x % fw) + 1;
+            coordsInfo.children[0].children[0].innerText = `${currentHoveredCoords.x + 1}, ${currentHoveredCoords.y + 1}`;
+            coordsInfo.children[1].children[0].innerText = `${frameX}, ${currentHoveredCoords.y + 1}`;
             
             if (activeHandle) {
                 if (activeHandle === 'tl') { shapeStartCoords.x = currentHoveredCoords.x; shapeStartCoords.y = currentHoveredCoords.y; }
