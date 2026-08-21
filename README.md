@@ -1,3 +1,3 @@
 test yourself
 
-(https://githubfito.github.io/cpc_sprite_studio/)
+(https://githubfito.github.io/cpc_sprite_studio/editor.html)
