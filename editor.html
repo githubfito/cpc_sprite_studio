@@ -102,7 +102,7 @@
 <header>
     <h1 style="margin:0; display:flex; align-items:baseline; gap:10px;">
         CPC SPRITE STUDIO
-        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 01/05/2026 23:42]</span>
+        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 21/08/2026 23:42]</span>
     </h1>
     <div id="file-status">Archivo: <b>Ninguno</b> | Último acceso: <b>---</b></div>
 </header>
@@ -2173,17 +2173,30 @@ window.onmouseup = () => {
 animWin.onwheel = (e) => { 
     e.preventDefault(); if (e.deltaY > 0) animZoom = Math.max(2, animZoom - 1); else animZoom = Math.min(40, animZoom + 1); 
     const {fw, fh, mode} = getActiveState().config;
-    let cv = document.getElementById('canvas'); const asp = (mode == 0) ? 2 : 1;
+    let cv = document.getElementById('canvas'); 
+    // Correccion de proporcion para Modo 2 (0.5)
+    const asp = (mode == 0) ? 2 : (mode == 2) ? 0.5 : 1; 
     cv.style.width = (fw * animZoom * asp) + "px"; cv.style.height = (fh * animZoom) + "px"; 
 };
 
 function playAnim() {
     const {fw, fh, nf, mode} = getActiveState().config;
     const cv = document.getElementById('canvas'), ctx = cv.getContext('2d');
-    const asp = (mode == 0) ? 2 : 1;
+    // Correccion de proporcion para Modo 2 (0.5)
+    const asp = (mode == 0) ? 2 : (mode == 2) ? 0.5 : 1;
     cv.width = fw; cv.height = fh; cv.style.width = (fw * animZoom * asp) + "px"; cv.style.height = (fh * animZoom) + "px";
     animWin.style.display = 'block'; let f = 0; if(animTimer) clearInterval(animTimer);
-    animTimer = setInterval(() => { const px = document.querySelectorAll('.pixel'); ctx.clearRect(0,0,fw,fh); for(let y=0; y<fh; y++) for(let x=0; x<fw; x++) { const p = px[y * (fw*nf) + (f*fw + x)]; if(p){ ctx.fillStyle = p.style.background; ctx.fillRect(x,y,1,1); } } f = (f+1)%nf; document.getElementById('anim-status').innerText = `Frame: ${f==0?nf:f}/${nf} | ${animSpeed}ms`; }, animSpeed);
+    animTimer = setInterval(() => { 
+        const px = document.querySelectorAll('.pixel'); ctx.clearRect(0,0,fw,fh); 
+        for(let y=0; y<fh; y++) {
+            for(let x=0; x<fw; x++) { 
+                const p = px[y * (fw*nf) + (f*fw + x)]; 
+                if(p){ ctx.fillStyle = p.style.background; ctx.fillRect(x,y,1,1); } 
+            }
+        } 
+        f = (f+1)%nf; 
+        document.getElementById('anim-status').innerText = `Frame: ${f==0?nf:f}/${nf} | ${animSpeed}ms`; 
+    }, animSpeed);
 }
 function closeAnim() { if(animTimer) clearInterval(animTimer); animWin.style.display = 'none'; }
 
