@@ -102,7 +102,7 @@
 <header>
     <h1 style="margin:0; display:flex; align-items:baseline; gap:10px;">
         CPC SPRITE STUDIO
-        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 01/05/2026 23:42]</span>
+        <span style="font-size: 14px; color: #888; font-weight: normal; font-style: italic;">by fitosoft [Actualizado: 21/08/2026 23:42]</span>
     </h1>
     <div id="file-status">Archivo: <b>Ninguno</b> | Último acceso: <b>---</b></div>
 </header>
@@ -323,7 +323,8 @@
         <button onclick="exportDSK()" style="background:#d35400; color:white;">3) DOWNLOAD .DSK (CON LOADER)</button>
         <button onclick="doExportABASC()" style="background:#f1c40f; color:black; font-weight:bold;">4) ABASC DATA (WORDS)</button>
         <button onclick="doExportC()" style="background:#9b59b6; color:white; font-weight:bold;">5) C ARRAY ({ 0x00... })</button>
-        <button onclick="showAlfabetExportMenu()" style="background:#e74c3c; color:white; font-weight:bold;">6) ALPHABET FORMAT</button>
+		<button onclick="showAlfabetExportMenu()" style="background:#e74c3c; color:white; font-weight:bold;">6) ALPHABET FORMAT</button>
+        <button onclick="doExportZX()" style="background:#111; color:#fff; border: 1px solid #ccc; font-weight:bold;">7) ZX SPECTRUM (BORIEL)</button>
         <button onclick="closeExport()" style="background:#500; margin-top:10px; color:white">CANCELAR</button>
     </div>
 </div>
@@ -1826,7 +1827,243 @@ function doExportABASC() {
     }
     window.open().document.write("<pre>" + res + "</pre>"); closeExport();
 }
+function doExportZX() {
+    // 1. Avisamos al usuario y cambiamos el cursor
+    alert("Haz clic en un pixel de la imagen para indicar cual sera el color de FONDO.");
+    document.body.style.cursor = 'crosshair';
 
+    // 2. Creamos el manejador del clic
+    const pickerHandler = function(e) {
+        const pixel = e.target.closest('.pixel');
+        
+        // Detenemos el evento para que la herramienta de dibujo no pinte el canvas
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Limpiamos el evento y restauramos el cursor
+        document.body.style.cursor = 'default';
+        document.removeEventListener('mousedown', pickerHandler, true);
+
+        if (pixel) {
+            // Leemos el color del pixel clicado y ejecutamos la exportacion
+            let bgPen = parseInt(pixel.dataset.pen);
+            if (isNaN(bgPen)) bgPen = 0;
+            executeExportZX(bgPen);
+        } else {
+            // Si hace clic fuera de la zona de pixeles, abortamos
+            console.log("Exportacion ZX cancelada.");
+        }
+    };
+
+    // 3. Escuchamos el proximo clic (fase de captura)
+    document.addEventListener('mousedown', pickerHandler, true);
+}
+
+function doExportZX() {
+    // 1. Cerramos la ventana modal ANTES de pedir el clic
+    if (typeof closeExport === 'function') {
+        closeExport();
+    }
+
+    // 2. Damos un instante para que la modal desaparezca antes de lanzar la alerta
+    setTimeout(() => {
+        alert("Haz clic en un pixel de la imagen para indicar cual sera el color de FONDO.");
+        document.body.style.cursor = 'crosshair';
+
+        // 3. Creamos el manejador del clic
+        const pickerHandler = function(e) {
+            const pixel = e.target.closest('.pixel');
+            
+            // Detenemos el evento para que la herramienta de dibujo no pinte
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Limpiamos el evento y restauramos el cursor
+            document.body.style.cursor = 'default';
+            document.removeEventListener('mousedown', pickerHandler, true);
+
+            if (pixel) {
+                // Leemos el color del pixel clicado y ejecutamos la exportacion
+                let bgPen = parseInt(pixel.dataset.pen);
+                if (isNaN(bgPen)) bgPen = 0;
+                executeExportZX(bgPen);
+            } else {
+                console.log("Exportacion ZX cancelada por hacer clic fuera de un pixel.");
+            }
+        };
+
+        // 4. Escuchamos el proximo clic (fase de captura)
+        document.addEventListener('mousedown', pickerHandler, true);
+    }, 100);
+}
+
+function doExportZX() {
+    // Guardamos el estado del checkbox antes de cerrar la ventana modal
+    const cb = document.getElementById('export-decimal-cb');
+    const useDecimal = cb ? cb.checked : false;
+
+    // 1. Cerramos la ventana modal ANTES de pedir el clic
+    if (typeof closeExport === 'function') {
+        closeExport();
+    }
+
+    // 2. Damos un instante para que la modal desaparezca antes de lanzar la alerta
+    setTimeout(() => {
+        alert("Haz clic en un pixel de la imagen para indicar cual sera el color de FONDO.");
+        document.body.style.cursor = 'crosshair';
+
+        // 3. Creamos el manejador del clic
+        const pickerHandler = function(e) {
+            const pixel = e.target.closest('.pixel');
+            
+            // Detenemos el evento para que la herramienta de dibujo no pinte
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Limpiamos el evento y restauramos el cursor
+            document.body.style.cursor = 'default';
+            document.removeEventListener('mousedown', pickerHandler, true);
+
+            if (pixel) {
+                // Leemos el color del pixel clicado
+                let bgPen = parseInt(pixel.dataset.pen);
+                if (isNaN(bgPen)) bgPen = 0;
+                
+                // Pasamos el color de fondo elegido y la opcion de decimal a la funcion de exportacion
+                executeExportZX(bgPen, useDecimal);
+            } else {
+                console.log("Exportacion ZX cancelada por hacer clic fuera de un pixel.");
+            }
+        };
+
+        // 4. Escuchamos el proximo clic (fase de captura)
+        document.addEventListener('mousedown', pickerHandler, true);
+    }, 100);
+}
+
+function doExportZX() {
+    // Guardamos el estado del checkbox antes de cerrar la ventana modal
+    const cb = document.getElementById('export-decimal-cb');
+    const useDecimal = cb ? cb.checked : false;
+
+    // 1. Cerramos la ventana modal ANTES de pedir el clic
+    if (typeof closeExport === 'function') {
+        closeExport();
+    }
+
+    // 2. Damos un instante para que la modal desaparezca antes de lanzar la alerta
+    setTimeout(() => {
+        alert("Haz clic en un pixel de la imagen para indicar cual sera el color de FONDO.");
+        document.body.style.cursor = 'crosshair';
+
+        // 3. Creamos el manejador del clic
+        const pickerHandler = function(e) {
+            const pixel = e.target.closest('.pixel');
+            
+            // Detenemos el evento para que la herramienta de dibujo no pinte
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Limpiamos el evento y restauramos el cursor
+            document.body.style.cursor = 'default';
+            document.removeEventListener('mousedown', pickerHandler, true);
+
+            if (pixel) {
+                // Leemos el color del pixel clicado
+                let bgPen = parseInt(pixel.dataset.pen);
+                if (isNaN(bgPen)) bgPen = 0;
+                
+                // Pasamos el color de fondo elegido y la opcion de decimal a la funcion de exportacion
+                executeExportZX(bgPen, useDecimal);
+            } else {
+                console.log("Exportacion ZX cancelada por hacer clic fuera de un pixel.");
+            }
+        };
+
+        // 4. Escuchamos el proximo clic (fase de captura)
+        document.addEventListener('mousedown', pickerHandler, true);
+    }, 100);
+}
+
+// Funcion que hace la exportacion real usando el color detectado
+function executeExportZX(bgPen, useDecimal) {
+    const state = getActiveState();
+    const {fw, fh, nf} = state.config;
+    const totalW = fw * nf;
+    const px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
+    
+    // Calculamos el tamano en bloques de caracteres (8x8)
+    const wBytes = Math.ceil(fw / 8);
+    const hBytes = Math.ceil(fh / 8);
+    const exportHeight = hBytes * 8; // Forzamos multiplo de 8
+
+    // Respetamos mayusculas y minusculas del nombre
+    let safeName = state.name.replace(/[^a-zA-Z0-9_]/g, '_');
+    
+    let res = `'- Includes -----------------------------------------------\n`;
+    res += `#INCLUDE <putchars.bas>\n\n`;
+    res += `PAPER 0:ink 5:cls\n\n`;
+    res += `'- Draw sprite --------------------------------------------\n`;
+
+    if (nf === 1) {
+        res += `putChars(10, 5, ${wBytes}, ${hBytes}, @${safeName})\n\n`;
+    } else {
+        // Bucle de animacion si hay multiples frames
+        res += `DO\n`;
+        for (let f = 0; f < nf; f++) {
+            res += `    putChars(10, 5, ${wBytes}, ${hBytes}, @${safeName}_${f})\n`;
+            res += `    PAUSE 15\n`;
+        }
+        res += `LOOP\n\n`;
+    }
+
+    res += `' This section must not be executed\n`;
+    res += `STOP\n\n`;
+    res += `'- Sprite definitions -------------------------------------\n`;
+
+    for (let f = 0; f < nf; f++) {
+        let frameName = nf > 1 ? `${safeName}_${f}` : safeName;
+        let bytes = [];
+        
+        // Orden estricto Column-Major
+        for (let b = 0; b < wBytes; b++) {
+            for (let y = 0; y < exportHeight; y++) {
+                let byteVal = 0;
+                for (let p = 0; p < 8; p++) {
+                    const pixelX = (f * fw) + (b * 8) + p;
+                    
+                    if (y < fh && ((b * 8) + p < fw)) {
+                        const pen = px[y * totalW + pixelX];
+                        
+                        // Si el pixel no tiene color definido en el DOM, asumimos que es fondo
+                        const currentPen = (pen !== undefined && !isNaN(pen)) ? pen : bgPen;
+                        
+                        // Todo lo que NO sea igual al fondo (bgPen) marcara un 1 en los DB
+                        if (currentPen !== bgPen) {
+                            byteVal |= (1 << (7 - p));
+                        }
+                    }
+                }
+                bytes.push(byteVal);
+            }
+        }
+        
+        res += `${frameName}:\nASM\n`;
+        
+        // Formato DB para cada bloque de 8 bytes
+        for (let i = 0; i < bytes.length; i += 8) {
+            let blockBytes = bytes.slice(i, i + 8);
+            let blockStr = blockBytes.map(b => useDecimal ? b.toString(10) : "$" + b.toString(16).toUpperCase().padStart(2, '0')).join(",");
+            res += `    DB ${blockStr}\n`;
+        }
+        res += `END ASM\n\n`;
+    }
+
+    const win = window.open();
+    // Proteccion HTML para < y >
+    const safeOutput = res.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    win.document.write("<pre>" + safeOutput + "</pre>");
+}
 function doExportC() {
     const state = getActiveState();
     const useDecimal = document.getElementById('export-decimal-cb').checked;
@@ -2173,17 +2410,30 @@ window.onmouseup = () => {
 animWin.onwheel = (e) => { 
     e.preventDefault(); if (e.deltaY > 0) animZoom = Math.max(2, animZoom - 1); else animZoom = Math.min(40, animZoom + 1); 
     const {fw, fh, mode} = getActiveState().config;
-    let cv = document.getElementById('canvas'); const asp = (mode == 0) ? 2 : 1;
+    let cv = document.getElementById('canvas'); 
+    // Correccion de proporcion para Modo 2 (0.5)
+    const asp = (mode == 0) ? 2 : (mode == 2) ? 0.5 : 1; 
     cv.style.width = (fw * animZoom * asp) + "px"; cv.style.height = (fh * animZoom) + "px"; 
 };
 
 function playAnim() {
     const {fw, fh, nf, mode} = getActiveState().config;
     const cv = document.getElementById('canvas'), ctx = cv.getContext('2d');
-    const asp = (mode == 0) ? 2 : 1;
+    // Correccion de proporcion para Modo 2 (0.5)
+    const asp = (mode == 0) ? 2 : (mode == 2) ? 0.5 : 1;
     cv.width = fw; cv.height = fh; cv.style.width = (fw * animZoom * asp) + "px"; cv.style.height = (fh * animZoom) + "px";
     animWin.style.display = 'block'; let f = 0; if(animTimer) clearInterval(animTimer);
-    animTimer = setInterval(() => { const px = document.querySelectorAll('.pixel'); ctx.clearRect(0,0,fw,fh); for(let y=0; y<fh; y++) for(let x=0; x<fw; x++) { const p = px[y * (fw*nf) + (f*fw + x)]; if(p){ ctx.fillStyle = p.style.background; ctx.fillRect(x,y,1,1); } } f = (f+1)%nf; document.getElementById('anim-status').innerText = `Frame: ${f==0?nf:f}/${nf} | ${animSpeed}ms`; }, animSpeed);
+    animTimer = setInterval(() => { 
+        const px = document.querySelectorAll('.pixel'); ctx.clearRect(0,0,fw,fh); 
+        for(let y=0; y<fh; y++) {
+            for(let x=0; x<fw; x++) { 
+                const p = px[y * (fw*nf) + (f*fw + x)]; 
+                if(p){ ctx.fillStyle = p.style.background; ctx.fillRect(x,y,1,1); } 
+            }
+        } 
+        f = (f+1)%nf; 
+        document.getElementById('anim-status').innerText = `Frame: ${f==0?nf:f}/${nf} | ${animSpeed}ms`; 
+    }, animSpeed);
 }
 function closeAnim() { if(animTimer) clearInterval(animTimer); animWin.style.display = 'none'; }
 
