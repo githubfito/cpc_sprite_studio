@@ -1707,7 +1707,7 @@ function generateBas2TapBuffer(basicTextLines, tapeName = "sprite") {
     
     headerData[12] = totalProgramLength & 0xFF;
     headerData[13] = (totalProgramLength >> 8) & 0xFF;
-    headerData[14] = 10; // Autostart línea 10
+    headerData[14] = 1; // Autostart línea 1
     headerData[15] = 0x00;
     headerData[16] = totalProgramLength & 0xFF;
     headerData[17] = (totalProgramLength >> 8) & 0xFF;
@@ -3958,13 +3958,13 @@ function executeExportZX(bgPen, useDecimal) {
 
     let totalSpriteBytes = allSpriteBytes.length;
     let zxBasicLines = [];
+    zxBasicLines.push(`1 CLEAR 59999: BORDER 0: PAPER 0: INK 7: CLS : PRINT AT 11,10;"Please wait..."`);
     zxBasicLines.push(`10 REM *** ZX SPECTRUM FAST ASM SPRITE: ${safeName} ***`);
-    zxBasicLines.push(`20 CLEAR 59999`);
-    zxBasicLines.push(`30 BORDER 0: PAPER 0: INK 5: CLS`);
     zxBasicLines.push(`40 RESTORE 1000`);
     zxBasicLines.push(`50 FOR I=60000 TO 60148: READ B: POKE I,B: NEXT I`);
     zxBasicLines.push(`60 LET S=60200`);
     zxBasicLines.push(`70 FOR I=S TO S+${totalSpriteBytes - 1}: READ B: POKE I,B: NEXT I`);
+    zxBasicLines.push(`75 BORDER 0: PAPER 0: INK 5: CLS`);
     zxBasicLines.push(`80 POKE 60003,10: POKE 60004,5`);
     zxBasicLines.push(`90 POKE 60005,${wBytes}: POKE 60006,${hBytes}`);
 
@@ -4003,22 +4003,49 @@ function executeExportZX(bgPen, useDecimal) {
 
     let zxBasicFullText = zxBasicLines.join('\n');
 
-    // 1. Mostrar vista previa de código en ventana nueva
+    // 1. Mostrar vista previa con pestañas interactivas (Boriel primero por defecto)
     const win = window.open();
-    let displayHtml = "<h3>1) CÓDIGO BASIC + RUTINA ASM Z80 RÁPIDA (Incluido en .TAP)</h3>";
-    displayHtml += "<pre>" + zxBasicFullText.replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</pre><hr>";
-    displayHtml += "<h3>2) CÓDIGO BORIEL ZX BASIC COMPILER (.BAS)</h3>";
-    displayHtml += "<pre>" + res.replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</pre>";
-    win.document.write(displayHtml);
+    if (win && win.document) {
+        const doc = win.document;
+        doc.title = safeName + " - ZX Spectrum Export";
+        doc.body.style.fontFamily = 'Consolas, monospace';
+        doc.body.style.background = '#181818';
+        doc.body.style.color = '#e0e0e0';
+        doc.body.style.margin = '0';
+        doc.body.style.padding = '20px';
 
-    // 2. Descargar automáticamente el código fuente en .bas
-    const blobBas = new Blob([res], { type: 'text/plain' });
-    triggerDownload(blobBas, safeName + ".bas");
+        doc.body.innerHTML = `
+<div style="display:flex; gap:10px; border-bottom:2px solid #333; padding-bottom:12px; margin-bottom:15px;">
+  <button id="btnBoriel" style="background:#007acc; color:#fff; border:1px solid #007acc; padding:9px 18px; font-weight:bold; cursor:pointer; border-radius:4px; font-size:13px;" onclick="document.getElementById('contBoriel').style.display='block'; document.getElementById('contSinclair').style.display='none'; this.style.background='#007acc'; this.style.color='#fff'; this.style.borderColor='#007acc'; var o=document.getElementById('btnSinclair'); o.style.background='#252526'; o.style.color='#aaa'; o.style.borderColor='#3e3e42';">1) BORIEL ZX BASIC COMPILER (.BAS)</button>
+  <button id="btnSinclair" style="background:#252526; color:#aaa; border:1px solid #3e3e42; padding:9px 18px; font-weight:bold; cursor:pointer; border-radius:4px; font-size:13px;" onclick="document.getElementById('contSinclair').style.display='block'; document.getElementById('contBoriel').style.display='none'; this.style.background='#007acc'; this.style.color='#fff'; this.style.borderColor='#007acc'; var o=document.getElementById('btnBoriel'); o.style.background='#252526'; o.style.color='#aaa'; o.style.borderColor='#3e3e42';">2) BASIC PURO SINCLAIR ZX SPECTRUM + ASM (.TAP / .BAS)</button>
+</div>
 
-    // 3. Generar y descargar el archivo .TAP tokenizado usando BASIC + ASM Z80
+<div id="contBoriel">
+  <div style="color:#888; font-size:12px; margin-bottom:8px;">Código fuente estructurado para Boriel ZX Basic (con #INCLUDE y bloques ASM DB)</div>
+  <pre id="preBoriel" style="background:#1e1e1e; padding:16px; border-radius:6px; border:1px solid #333; color:#9cdcfe; font-size:13px; line-height:1.4; overflow-x:auto; margin:0;"></pre>
+</div>
+
+<div id="contSinclair" style="display:none;">
+  <div style="color:#888; font-size:12px; margin-bottom:8px;">Código Sinclair BASIC con cargador y rutina ultra-rápida Z80 en código máquina</div>
+  <pre id="preSinclair" style="background:#1e1e1e; padding:16px; border-radius:6px; border:1px solid #333; color:#9cdcfe; font-size:13px; line-height:1.4; overflow-x:auto; margin:0;"></pre>
+</div>
+`;
+        doc.getElementById('preBoriel').textContent = res;
+        doc.getElementById('preSinclair').textContent = zxBasicFullText;
+    }
+
+    // 2. Generar y descargar el archivo .TAP tokenizado usando BASIC + ASM Z80
     let tapBuffer = generateBas2TapBuffer(zxBasicLines, safeName.substring(0, 10));
     const blobTap = new Blob([tapBuffer], { type: 'application/octet-stream' });
     triggerDownload(blobTap, safeName + ".tap");
+
+    // 3. Descargar código fuente Boriel (.bas)
+    const blobBoriel = new Blob([res], { type: 'text/plain' });
+    triggerDownload(blobBoriel, safeName + "_boriel.bas");
+
+    // 4. Descargar código fuente Sinclair ZX BASIC (.bas)
+    const blobSinclair = new Blob([zxBasicFullText], { type: 'text/plain' });
+    triggerDownload(blobSinclair, safeName + "_sinclair.bas");
 }
 
 function doExportC() {
