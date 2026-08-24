@@ -3950,42 +3950,51 @@ function executeExportZX(bgPen, useDecimal) {
         res += `END ASM\n\n`;
     }
 
-    // --- 2. Generación de código BASIC Puro Sinclair ZX Spectrum ---
-    let zxBasicLines = [];
-    zxBasicLines.push(`10 REM *** ZX SPECTRUM BASIC: ${safeName} ***`);
-    zxBasicLines.push(`20 BORDER 0: PAPER 0: INK 5: CLS`);
-    zxBasicLines.push(`30 LET X=10: LET Y=5`);
-    if (nf === 1) {
-        zxBasicLines.push(`40 LET W=${wBytes}: LET H=${hBytes}`);
-        zxBasicLines.push(`50 FOR C=0 TO W-1`);
-        zxBasicLines.push(`60 FOR R=0 TO H-1`);
-        zxBasicLines.push(`70 LET A=16384+INT((Y+R)/8)*2048+((Y+R)-INT((Y+R)/8)*8)*32+X+C`);
-        zxBasicLines.push(`80 FOR L=0 TO 7`);
-        zxBasicLines.push(`90 READ D: POKE A+L*256,D`);
-        zxBasicLines.push(`100 NEXT L`);
-        zxBasicLines.push(`110 NEXT R`);
-        zxBasicLines.push(`120 NEXT C`);
-        zxBasicLines.push(`130 STOP`);
-    } else {
-        zxBasicLines.push(`40 LET W=${wBytes}: LET H=${hBytes}: LET F=${nf}`);
-        zxBasicLines.push(`50 RESTORE 1000`);
-        zxBasicLines.push(`60 FOR K=1 TO F`);
-        zxBasicLines.push(`70 FOR C=0 TO W-1`);
-        zxBasicLines.push(`80 FOR R=0 TO H-1`);
-        zxBasicLines.push(`90 LET A=16384+INT((Y+R)/8)*2048+((Y+R)-INT((Y+R)/8)*8)*32+X+C`);
-        zxBasicLines.push(`100 FOR L=0 TO 7`);
-        zxBasicLines.push(`110 READ D: POKE A+L*256,D`);
-        zxBasicLines.push(`120 NEXT L`);
-        zxBasicLines.push(`130 NEXT R`);
-        zxBasicLines.push(`140 NEXT C`);
-        zxBasicLines.push(`150 PAUSE 15`);
-        zxBasicLines.push(`160 NEXT K`);
-        zxBasicLines.push(`170 GO TO 50`);
-    }
-    zxBasicLines.push(`1000 REM *** SPRITE DATA ***`);
+    // --- 2. Generación de código BASIC + Rutina Z80 en Código Máquina (ASM) ---
+    // Rutina Z80 ultra-rápida (149 bytes) alojada en memoria superior (60000..60148)
+    const ASM_SPRITE_BLITTER = [
+        195, 111, 234, 10, 5, 2, 2, 200, 234, 0, 0, 0, 0, 0, 0, 58, 101, 234, 50, 107, 234, 42, 103, 234, 34, 109, 234, 175, 50, 105, 234, 58, 102, 234, 50, 108, 234, 175, 50, 106, 234, 58, 100, 234, 79, 58, 106, 234, 129, 135, 135, 135, 71, 58, 99, 234, 79, 58, 105, 234, 129, 79, 120, 230, 7, 103, 120, 230, 192, 15, 15, 15, 180, 246, 64, 103, 120, 230, 56, 7, 7, 177, 111, 237, 91, 109, 234, 26, 119, 19, 36, 26, 119, 19, 36, 26, 119, 19, 36, 26, 119, 19, 36, 26, 119, 19, 36, 26, 119, 19, 36, 26, 119, 19, 36, 26, 119, 19, 237, 83, 109, 234, 58, 106, 234, 60, 50, 106, 234, 33, 108, 234, 53, 32, 162, 58, 105, 234, 60, 50, 105, 234, 33, 107, 234, 53, 32, 139, 201
+    ];
 
-    let dataLineNum = 1010;
+    let totalSpriteBytes = allSpriteBytes.length;
+    let zxBasicLines = [];
+    zxBasicLines.push(`10 REM *** ZX SPECTRUM FAST ASM SPRITE: ${safeName} ***`);
+    zxBasicLines.push(`20 CLEAR 59999`);
+    zxBasicLines.push(`30 BORDER 0: PAPER 0: INK 5: CLS`);
+    zxBasicLines.push(`40 RESTORE 1000`);
+    zxBasicLines.push(`50 FOR I=60000 TO 60148: READ B: POKE I,B: NEXT I`);
+    zxBasicLines.push(`60 LET S=60200`);
+    zxBasicLines.push(`70 FOR I=S TO S+${totalSpriteBytes - 1}: READ B: POKE I,B: NEXT I`);
+    zxBasicLines.push(`80 POKE 60003,10: POKE 60004,5`);
+    zxBasicLines.push(`90 POKE 60005,${wBytes}: POKE 60006,${hBytes}`);
+
+    if (nf === 1) {
+        zxBasicLines.push(`100 POKE 60007,S-INT(S/256)*256: POKE 60008,INT(S/256)`);
+        zxBasicLines.push(`110 RANDOMIZE USR 60000`);
+        zxBasicLines.push(`120 STOP`);
+    } else {
+        let frameSize = wBytes * exportHeight;
+        zxBasicLines.push(`100 LET FS=${frameSize}`);
+        zxBasicLines.push(`110 FOR K=0 TO ${nf - 1}`);
+        zxBasicLines.push(`120 LET P=S+K*FS`);
+        zxBasicLines.push(`130 POKE 60007,P-INT(P/256)*256: POKE 60008,INT(P/256)`);
+        zxBasicLines.push(`140 RANDOMIZE USR 60000`);
+        zxBasicLines.push(`150 PAUSE 10`);
+        zxBasicLines.push(`160 NEXT K`);
+        zxBasicLines.push(`170 GO TO 110`);
+    }
+
+    zxBasicLines.push(`1000 REM *** ASM Z80 SPRITE ROUTINE (149 BYTES) ***`);
+    let asmLineNum = 1010;
     const itemsPerLine = 16;
+    for (let i = 0; i < ASM_SPRITE_BLITTER.length; i += itemsPerLine) {
+        let chunk = ASM_SPRITE_BLITTER.slice(i, i + itemsPerLine);
+        zxBasicLines.push(`${asmLineNum} DATA ${chunk.join(',')}`);
+        asmLineNum += 10;
+    }
+
+    zxBasicLines.push(`2000 REM *** SPRITE DATA (${totalSpriteBytes} BYTES) ***`);
+    let dataLineNum = 2010;
     for (let i = 0; i < allSpriteBytes.length; i += itemsPerLine) {
         let chunk = allSpriteBytes.slice(i, i + itemsPerLine);
         zxBasicLines.push(`${dataLineNum} DATA ${chunk.join(',')}`);
@@ -3996,7 +4005,7 @@ function executeExportZX(bgPen, useDecimal) {
 
     // 1. Mostrar vista previa de código en ventana nueva
     const win = window.open();
-    let displayHtml = "<h3>1) CÓDIGO BASIC PURO SINCLAIR ZX SPECTRUM (Incluido en .TAP)</h3>";
+    let displayHtml = "<h3>1) CÓDIGO BASIC + RUTINA ASM Z80 RÁPIDA (Incluido en .TAP)</h3>";
     displayHtml += "<pre>" + zxBasicFullText.replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</pre><hr>";
     displayHtml += "<h3>2) CÓDIGO BORIEL ZX BASIC COMPILER (.BAS)</h3>";
     displayHtml += "<pre>" + res.replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</pre>";
@@ -4006,7 +4015,7 @@ function executeExportZX(bgPen, useDecimal) {
     const blobBas = new Blob([res], { type: 'text/plain' });
     triggerDownload(blobBas, safeName + ".bas");
 
-    // 3. Generar y descargar el archivo .TAP tokenizado usando BASIC puro de Sinclair ZX Spectrum
+    // 3. Generar y descargar el archivo .TAP tokenizado usando BASIC + ASM Z80
     let tapBuffer = generateBas2TapBuffer(zxBasicLines, safeName.substring(0, 10));
     const blobTap = new Blob([tapBuffer], { type: 'application/octet-stream' });
     triggerDownload(blobTap, safeName + ".tap");
