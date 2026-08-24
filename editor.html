@@ -4102,15 +4102,19 @@ function getBin(anim = false, bgPen = 0) {
 
     const buf = new Uint8Array(Math.max(16384, actualSize)), px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
 
-    let bgArray = [];
-    for (let i = 0; i < ppb; i++) bgArray.push(bgPen);
-    let bgByte = packByte(bgArray);
+    function remapPen(pen) {
+        if (pen === undefined || isNaN(pen)) return 0;
+        if (bgPen === 0) return pen;
+        if (pen === bgPen) return 0;
+        if (pen === 0) return bgPen;
+        return pen;
+    }
 
-    buf.fill(bgByte); // Rellenamos el fondo con el color de fondo elegido
+    buf.fill(0); // Pen 0 es ahora el color de fondo
 
-    if (anim) { for (let f=0; f<nf; f++) for (let y=0; y<fh; y++) for (let b=0; b<wB; b++) { let pns = []; for (let p=0; p<ppb; p++) { let pen = px[y*totalW + (f*fw) + (b*ppb) + p]; pns.push((pen !== undefined && !isNaN(pen)) ? pen : bgPen); } if (off < buf.length) buf[off++] = packByte(pns); } }
+    if (anim) { for (let f=0; f<nf; f++) for (let y=0; y<fh; y++) for (let b=0; b<wB; b++) { let pns = []; for (let p=0; p<ppb; p++) { let pen = px[y*totalW + (f*fw) + (b*ppb) + p]; pns.push(remapPen(pen)); } if (off < buf.length) buf[off++] = packByte(pns); } }
 
-    else { for (let y=0; y<Math.min(fh, 200); y++) { let addr = (Math.floor(y/8)*80) + ((y%8)*2048); for (let b=0; b<Math.min(tB, 80); b++) { let pns = []; for (let p=0; p<ppb; p++) { let pen = px[y*totalW + (b*ppb) + p]; pns.push((pen !== undefined && !isNaN(pen)) ? pen : bgPen); } if (addr+b < 16384) buf[addr+b] = packByte(pns); } } }
+    else { for (let y=0; y<Math.min(fh, 200); y++) { let addr = (Math.floor(y/8)*80) + ((y%8)*2048); for (let b=0; b<Math.min(tB, 80); b++) { let pns = []; for (let p=0; p<ppb; p++) { let pen = px[y*totalW + (b*ppb) + p]; pns.push(remapPen(pen)); } if (addr+b < 16384) buf[addr+b] = packByte(pns); } } }
 
     return buf;
 

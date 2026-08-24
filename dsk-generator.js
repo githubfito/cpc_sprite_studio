@@ -68,10 +68,17 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed, bgPen
     const ppb = (mode == 0 ? 2 : (mode == 1 ? 4 : 8));
     const wBytes = Math.ceil(fw / ppb);
 
-    const palette = getActiveState().fModes[mode];
+    const palette = [...getActiveState().fModes[mode]];
     const bgHw = (palette && palette[bgPen] !== undefined) ? palette[bgPen] : 0;
-    const textPen = (bgPen === 1 ? 0 : 1);
-    const inkLine = "30 " + palette.map((hw, idx) => `INK ${idx},${hw}`).join(":") + `:BORDER ${bgHw}:PAPER ${bgPen}:PEN ${textPen}:CLS`;
+    
+    // Asignar el color seleccionado a INK 0 (y reubicar el color antiguo del pen 0 si era diferente)
+    let inkCommands = palette.map((hw, idx) => {
+        if (idx === 0) return `INK 0,${bgHw}`;
+        if (idx === bgPen) return `INK ${idx},${palette[0]}`;
+        return `INK ${idx},${hw}`;
+    });
+
+    const inkLine = "30 " + inkCommands.join(":") + `:BORDER ${bgHw}:PAPER 0:PEN 1:CLS`;
     
     const memAddr = animate ? "&1FFF" : "&3FFF";
     const loadAddrStr = animate ? "&2200" : "&C000";
@@ -81,10 +88,6 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed, bgPen
     if (!animate) {
         loader += `50 CALL &BB18\r\n60 GOTO 60\r\n\x1A`;
     } else {
-        let bgArray = [];
-        for (let i = 0; i < ppb; i++) bgArray.push(bgPen);
-        let bgByte = (typeof packByte === 'function') ? packByte(bgArray) : 0;
-
         const delay = Math.max(1, Math.floor(animSpeed / 20));
         const safeY = Math.max(0, Math.floor((200 - fh) / 2));
         const maxPx = Math.max(0, 80 - wBytes);
@@ -97,13 +100,15 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed, bgPen
                  `55 DATA 193,4,13,32,201,201\r\n` +
                  `56 FOR i=0 TO 26: READ a: POKE &2150+i, a: NEXT i\r\n` +
                  `57 DATA 221,78,0,221,70,1,120,177,200,221,110,2,221,102,3,93,84,19\r\n` +
-                 `58 DATA 54,${bgByte},11,120,177,200,237,176,201\r\n` +
-                 `60 f=0: w=${wBytes}: h=${fh}: nf=${nf}\r\n` +
+                 `58 DATA 54,0,11,120,177,200,237,176,201\r\n` +
+                 `60 f=0: w=${wBytes}: h=${fh}: nf=${nf}: d=${delay}\r\n` +
                  `65 b=&2200 + (w * h * nf): sz=w*h\r\n` +
                  `66 IF b > 32767 THEN b = b - 65536\r\n` +
                  `67 CALL &2150, b, sz\r\n` +
                  `70 px=0: py=${safeY}: dx=${dxInit}\r\n80 CLS\r\n90 WHILE 1\r\n` +
-                 `100 FOR i=1 TO ${delay}: CALL &BD19: NEXT i\r\n` + 
+                 `95 k$=INKEY$: IF k$="o" OR k$="O" THEN d=d+1: IF d>50 THEN d=50\r\n` +
+                 `96 IF k$="p" OR k$="P" THEN d=d-1: IF d<1 THEN d=1\r\n` +
+                 `100 FOR i=1 TO d: CALL &BD19: NEXT i\r\n` + 
                  `110 CALL &2100, b, h, w, px, py\r\n120 px = px + dx\r\n` +
                  `130 IF px < 0 OR px > ${maxPx} THEN dx = -dx: px = px + dx\r\n` +
                  `140 s = &2200 + (f * w * h): IF s > 32767 THEN s = s - 65536\r\n` +
