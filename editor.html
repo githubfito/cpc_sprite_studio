@@ -4090,7 +4090,7 @@ function doExportC() {
 
 
 
-function getBin(anim = false) {
+function getBin(anim = false, bgPen = 0) {
 
     const {fw, fh, nf, mode} = getActiveState().config;
 
@@ -4102,11 +4102,15 @@ function getBin(anim = false) {
 
     const buf = new Uint8Array(Math.max(16384, actualSize)), px = Array.from(document.querySelectorAll('.pixel')).map(p => parseInt(p.dataset.pen));
 
-    buf.fill(0); // Garantizamos que el frame final fantasma se inicie con ceros limpios
+    let bgArray = [];
+    for (let i = 0; i < ppb; i++) bgArray.push(bgPen);
+    let bgByte = packByte(bgArray);
 
-    if (anim) { for (let f=0; f<nf; f++) for (let y=0; y<fh; y++) for (let b=0; b<wB; b++) { let pns = []; for (let p=0; p<ppb; p++) pns.push(px[y*totalW + (f*fw) + (b*ppb) + p] || 0); if (off < buf.length) buf[off++] = packByte(pns); } }
+    buf.fill(bgByte); // Rellenamos el fondo con el color de fondo elegido
 
-    else { for (let y=0; y<Math.min(fh, 200); y++) { let addr = (Math.floor(y/8)*80) + ((y%8)*2048); for (let b=0; b<Math.min(tB, 80); b++) { let pns = []; for (let p=0; p<ppb; p++) pns.push(px[y*totalW + (b*ppb) + p] || 0); if (addr+b < 16384) buf[addr+b] = packByte(pns); } } }
+    if (anim) { for (let f=0; f<nf; f++) for (let y=0; y<fh; y++) for (let b=0; b<wB; b++) { let pns = []; for (let p=0; p<ppb; p++) { let pen = px[y*totalW + (f*fw) + (b*ppb) + p]; pns.push((pen !== undefined && !isNaN(pen)) ? pen : bgPen); } if (off < buf.length) buf[off++] = packByte(pns); } }
+
+    else { for (let y=0; y<Math.min(fh, 200); y++) { let addr = (Math.floor(y/8)*80) + ((y%8)*2048); for (let b=0; b<Math.min(tB, 80); b++) { let pns = []; for (let p=0; p<ppb; p++) { let pen = px[y*totalW + (b*ppb) + p]; pns.push((pen !== undefined && !isNaN(pen)) ? pen : bgPen); } if (addr+b < 16384) buf[addr+b] = packByte(pns); } } }
 
     return buf;
 
@@ -4170,11 +4174,43 @@ function closeDSKMenu() { document.getElementById('dsk-export-overlay').style.di
 
 function doExportDSK(anim) { 
 
+    closeDSKMenu();
+
+    setTimeout(() => {
+        alert("Haz clic en un pixel de la imagen para indicar cual sera el color de FONDO.");
+        document.body.style.cursor = 'crosshair';
+
+        const pickerHandler = function(e) {
+            const pixel = e.target.closest('.pixel');
+            
+            e.preventDefault();
+            e.stopPropagation();
+
+            document.body.style.cursor = 'default';
+            document.removeEventListener('mousedown', pickerHandler, true);
+
+            if (pixel) {
+                let bgPen = parseInt(pixel.dataset.pen);
+                if (isNaN(bgPen)) bgPen = 0;
+                
+                executeExportDSK(anim, bgPen);
+            } else {
+                console.log("Exportacion DSK cancelada por hacer clic fuera de un pixel.");
+            }
+        };
+
+        document.addEventListener('mousedown', pickerHandler, true);
+    }, 100);
+
+}
+
+function executeExportDSK(anim, bgPen) {
+
     const {fw, fh, nf, mode} = getActiveState().config;
 
-    const buf = generateCPCDisk(getBin(anim), mode, anim, fw, fh, nf, animSpeed); 
+    const buf = generateCPCDisk(getBin(anim, bgPen), mode, anim, fw, fh, nf, animSpeed, bgPen); 
 
-    triggerDownload(new Blob([buf]), "juego.dsk"); closeDSKMenu(); 
+    triggerDownload(new Blob([buf]), "juego.dsk");
 
 }
 

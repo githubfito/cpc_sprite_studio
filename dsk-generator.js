@@ -39,7 +39,7 @@ function writeDirEntry(buffer, offset, filename, ext, extent, records, blocks) {
     for (let i = 0; i < blocks.length; i++) buffer[offset + 16 + i] = blocks[i];
 }
 
-function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed) {
+function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed, bgPen = 0) {
     const TRACKS = 40;
     const SECTORS = 9;
     const TRACK_DATA_SIZE = 4864; 
@@ -69,16 +69,22 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed) {
     const wBytes = Math.ceil(fw / ppb);
 
     const palette = getActiveState().fModes[mode];
-    const inkLine = "30 " + palette.map((hw, idx) => `INK ${idx},${hw}`).join(":") + ":BORDER 0";
+    const bgHw = (palette && palette[bgPen] !== undefined) ? palette[bgPen] : 0;
+    const textPen = (bgPen === 1 ? 0 : 1);
+    const inkLine = "30 " + palette.map((hw, idx) => `INK ${idx},${hw}`).join(":") + `:BORDER ${bgHw}:PAPER ${bgPen}:PEN ${textPen}:CLS`;
     
     const memAddr = animate ? "&1FFF" : "&3FFF";
     const loadAddrStr = animate ? "&2200" : "&C000";
     
-    let loader = `10 MEMORY ${memAddr}\r\n20 MODE ${mode}\r\n25 PRINT "Please wait..."\r\n${inkLine}\r\n40 LOAD "SCREEN.BIN",${loadAddrStr}\r\n`;
+    let loader = `10 MEMORY ${memAddr}\r\n20 MODE ${mode}\r\n${inkLine}\r\n25 PRINT "Please wait..."\r\n40 LOAD "SCREEN.BIN",${loadAddrStr}\r\n`;
 
     if (!animate) {
         loader += `50 CALL &BB18\r\n60 GOTO 60\r\n\x1A`;
     } else {
+        let bgArray = [];
+        for (let i = 0; i < ppb; i++) bgArray.push(bgPen);
+        let bgByte = (typeof packByte === 'function') ? packByte(bgArray) : 0;
+
         const delay = Math.max(1, Math.floor(animSpeed / 20));
         const safeY = Math.max(0, Math.floor((200 - fh) / 2));
         const maxPx = Math.max(0, 80 - wBytes);
@@ -91,7 +97,7 @@ function generateCPCDisk(screenData, mode, animate, fw, fh, nf, animSpeed) {
                  `55 DATA 193,4,13,32,201,201\r\n` +
                  `56 FOR i=0 TO 26: READ a: POKE &2150+i, a: NEXT i\r\n` +
                  `57 DATA 221,78,0,221,70,1,120,177,200,221,110,2,221,102,3,93,84,19\r\n` +
-                 `58 DATA 54,0,11,120,177,200,237,176,201\r\n` +
+                 `58 DATA 54,${bgByte},11,120,177,200,237,176,201\r\n` +
                  `60 f=0: w=${wBytes}: h=${fh}: nf=${nf}\r\n` +
                  `65 b=&2200 + (w * h * nf): sz=w*h\r\n` +
                  `66 IF b > 32767 THEN b = b - 65536\r\n` +
