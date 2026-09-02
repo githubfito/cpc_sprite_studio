@@ -430,6 +430,12 @@
 
             </div>
 
+            <div id="zoom-info" style="padding: 0 20px; font-size: 11px; color: #aaa; border-right: 1px solid #444; display: flex; align-items: center; white-space: nowrap; cursor: pointer;" title="Nivel de zoom actual (clic para restablecer a 100%)">
+
+                <div>Zoom: <span id="zoom-val" style="color: #f1c40f; font-weight: bold;">100%</span></div>
+
+            </div>
+
             <div id="pal" class="pal" style="border-top: none; flex: 1;"></div>
 
         </div>
@@ -3810,19 +3816,19 @@ function doExportABASC() {
 
         const pixRequeridos = ppb * 2;
 
-        alert(`ERROR DE EXPORTACIÓN ABASC:\n\nEl ancho actual de tu sprite ocupa ${bPR} bytes por fila.\nEl formato ABASC agrupa los datos en 'palabras' (words) de 2 bytes (16 bits), por lo que el ancho en bytes siempre debe ser un número PAR.\n\nEn el MODO ${mode} actual, esto significa que el ancho en píxeles debe ser MÚLTIPLO DE ${pixRequeridos}.\n\nPor favor, ajusta el ancho de tu sprite en la interfaz y vuelve a intentarlo.`);
-
-        closeExport();
-
-        return;
+        alert(`AVISO DE EXPORTACIÓN ABASC:\n\nEl ancho actual de tu sprite ocupa ${bPR} bytes por fila (número impar).\nEl formato ABASC agrupa los datos en 'palabras' (words) de 2 bytes (16 bits), por lo que el ancho en bytes habitualmente debe ser un número PAR.\n\nEn el MODO ${mode} actual, esto significa que el ancho en píxeles debería ser MÚLTIPLO DE ${pixRequeridos}.\n\nSe permite continuar con la exportación, pero los resultados pueden no ser los esperados.`);
 
     }
 
-        const safeName = state.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const safeName = state.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
     let inkLine = state.fModes[mode].map((color, index) => `INK ${index},${color}`).join(' : ');
 
-    let res = `' ABASC DATA - ${state.name}\n' CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px\n' Palette config:\n${inkLine}\n`; const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
+    let res = `' ABASC DATA - ${state.name}\n' CPC Mode ${mode} | Width: ${fw}px, Height: ${fh}px\n' Palette config:\n${inkLine}\n`;
+    if (bPR % 2 !== 0) {
+        res += `' AVISO: El ancho en bytes (${bPR}) es impar. Los resultados pueden no ser los esperados.\n`;
+    }
+    const px = Array.from(document.querySelectorAll('.pixel')).map(p=>parseInt(p.dataset.pen));
 
     for (let f = 0; f < nf; f++) {
 
@@ -4672,6 +4678,22 @@ function saveCurrentUIToState() {
 
 
 
+function updateZoomDisplay() {
+
+    const state = getActiveState();
+
+    const zoomValEl = document.getElementById('zoom-val');
+
+    if (zoomValEl && state && state.viewport) {
+
+        zoomValEl.innerText = `${Math.round(state.viewport.scale * 100)}%`;
+
+    }
+
+}
+
+
+
 function loadStateToUI() {
 
     const state = getActiveState();
@@ -4684,6 +4706,8 @@ function loadStateToUI() {
 
     pn.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
 
+    updateZoomDisplay();
+
     initGrid(false, state.pixelData);
 
 }
@@ -4692,15 +4716,29 @@ function loadStateToUI() {
 
 const vp = document.getElementById('viewport'), pn = document.getElementById('canvas-panner');
 
+const zoomInfoEl = document.getElementById('zoom-info');
+if (zoomInfoEl) {
+    zoomInfoEl.onclick = () => {
+        const state = getActiveState();
+        if (state && state.viewport) {
+            state.viewport.scale = 1;
+            pn.style.transform = `translate(${state.viewport.posX}px, ${state.viewport.posY}px) scale(${state.viewport.scale})`;
+            updateZoomDisplay();
+        }
+    };
+}
+
 vp.onwheel = (e) => { 
 
     e.preventDefault(); 
 
-    const state = getActiveState();
+    const state = getActiveState(); 
 
     state.viewport.scale = Math.min(Math.max(0.05, state.viewport.scale * (e.deltaY > 0 ? 0.9 : 1.1)), 20); 
 
     pn.style.transform = `translate(${state.viewport.posX}px, ${state.viewport.posY}px) scale(${state.viewport.scale})`; 
+
+    updateZoomDisplay();
 
 };
 
@@ -5240,7 +5278,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-    startNewProject(true); document.querySelectorAll('.toolbar input:not(#full-shift-cb, #hide-grid-cb, #transparent-bg-cb, #spill-text-cb)').forEach(i => {
+    startNewProject(true);
+    updateZoomDisplay();
+    document.querySelectorAll('.toolbar input:not(#full-shift-cb, #hide-grid-cb, #transparent-bg-cb, #spill-text-cb)').forEach(i => {
 
         if (i.id === 'nf') { i.onfocus = () => { getActiveState().previousNfValue = i.value; }; }
 
